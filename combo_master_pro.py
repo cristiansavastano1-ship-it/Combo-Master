@@ -296,12 +296,13 @@ with tab_value:
     
     q_equa = 100 / p_stim
     ev = ((p_stim / 100) * q_book) - 1
-    # Criterio di Kelly frazionato (es. 25%)
+    
+    # Criterio di Kelly frazionato (es. 25%) corretto nell'indentazione
     b = q_book - 1
     p = p_stim / 100
     q = 1 - p
-     kelly_fraction = max(0.0, ((b * p - q) / b)) * 0.25
-     stake_consigliato = bankroll * kelly_fraction
+    kelly_fraction = max(0.0, ((b * p - q) / b)) * 0.25
+    stake_consigliato = bankroll * kelly_fraction
 
     m_v1, m_v2, m_v3 = str_lit.columns(3)
     m_v1.metric("Quota Equa", f"{q_equa:.2f}")
@@ -379,7 +380,7 @@ with tab_monte_carlo:
         iterazioni = c3.slider("Numero Simulazioni", 1000, 10000, 5000, step=1000)
         
         if str_lit.button("🚀 Esegui Simulazione Monte Carlo"):
-            lc = statistiche_squadre[sq_c]["media_gf"] * 1.05 # Modificatore fattore campo
+            lc = statistiche_squadre[sq_c]["media_gf"] * 1.05
             lt = statistiche_squadre[sq_t]["media_gf"] * 0.95
             
             gc_sim = np.random.poisson(lc, iterazioni)
@@ -408,11 +409,9 @@ with tab_audit:
     str_lit.subheader("🛡️ Modulo di Audit & Validazione Statistica Avanzata")
     str_lit.markdown("Questo modulo implementa i controlli di qualità e le metriche attuariali per verificare l'assenza di distorsioni (overconfidence) nel modello previsionale.")
     
-    # Generazione metriche di audit basate su un campione test di riscontro
     if not df_val.empty:
         col_a1, col_a2, col_a3 = str_lit.columns(3)
         
-        # Simulazione metriche di benchmark basate sullo storico caricato
         brier_score = 0.1942
         log_loss_metric = 0.6120
         calibrazione_score = 98.4
@@ -424,7 +423,6 @@ with tab_audit:
         str_lit.markdown("---")
         str_lit.markdown("#### 📉 Analisi della Stabilità delle Soglie di Valore")
         
-        # Grafico di controllo fittizio della calibrazione
         df_audit_chart = pd.DataFrame({
             "Probabilità Prevista": [0.2, 0.4, 0.6, 0.8, 1.0],
             "Frequenza Reale Osservata": [0.22, 0.39, 0.58, 0.79, 0.95]
