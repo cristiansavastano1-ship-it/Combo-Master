@@ -1,3 +1,4 @@
+
 import math
 import pandas as pd
 import numpy as np
@@ -15,21 +16,21 @@ str_lit.set_page_config(
     page_icon="⚽",
 )
 
-# --- GESTIONE DINAMICA TEMA (DARK / LIGHT MODE) ---
+# --- GESTIONE DINAMICA TEMA (DARK / LIGHT MODE - STYLE MODERN AI) ---
 str_lit.sidebar.markdown("### ⚙️ Pannello di Controllo Master", unsafe_allow_html=True)
 
 tema_selezionato = str_lit.sidebar.radio(
-    "🎨 Tema Grafico", ["🌙 Dark Mode", "☀️ Light Mode"], horizontal=True
+    "🎨 Tema Grafico", ["🌙 Dark AI Mode", "☀️ Light Clean Mode"], horizontal=True
 )
 
-if tema_selezionato == "🌙 Dark Mode":
-    bg_app = "#0b0f19"
-    text_app = "#f8fafc"
-    card_bg = "linear-gradient(135deg, #111827 0%, #1f2937 100%)"
-    card_border = "#374151"
-    analysis_bg = "#111827"
-    metric_bg = "#1f2937"
-    metric_border = "#4b5563"
+if tema_selezionato == "🌙 Dark AI Mode":
+    bg_app = "#090d16"
+    text_app = "#f1f5f9"
+    card_bg = "linear-gradient(135deg, rgba(17, 24, 39, 0.7) 0%, rgba(31, 41, 55, 0.7) 100%)"
+    card_border = "rgba(55, 65, 81, 0.6)"
+    analysis_bg = "rgba(17, 24, 39, 0.85)"
+    metric_bg = "rgba(31, 41, 55, 0.6)"
+    metric_border = "rgba(75, 85, 99, 0.4)"
     text_muted = "#94a3b8"
     plotly_template = "plotly_dark"
     radio_bg = "#1f2937"
@@ -47,43 +48,110 @@ else:
     radio_bg = "#e2e8f0"
     radio_text = "#0f172a"
 
-# Iniezione Stile CSS Avanzato
+# Iniezione Stile CSS Avanzato (Stile Web App IA / Glassmorphism)
 str_lit.markdown(
     f"""
     <style>
     .stApp {{ background-color: {bg_app}; color: {text_app}; }}
+    
+    /* Header & Hero Section */
+    .hero-container {{
+        background: linear-gradient(135deg, #1e1b4b 0%, #31103f 50%, #0f172a 100%);
+        padding: 35px;
+        border-radius: 20px;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        margin-bottom: 30px;
+        text-align: center;
+    }}
+    .hero-title {{
+        color: #ffffff;
+        font-weight: 900;
+        font-size: 2.2rem;
+        letter-spacing: -0.5px;
+        margin-bottom: 10px;
+        text-shadow: 0 2px 10px rgba(56, 189, 248, 0.4);
+    }}
+    .hero-subtitle {{
+        color: #cbd5e1;
+        font-size: 1.1rem;
+        max-width: 800px;
+        margin: 0 auto;
+    }}
+
+    /* Card & Container Modificati */
     .match-card {{ 
-        background: {card_bg}; padding: 22px; border-radius: 16px; 
-        border: 1px solid {card_border}; margin-bottom: 16px; 
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); transition: transform 0.2s ease;
+        background: {card_bg}; 
+        padding: 24px; 
+        border-radius: 18px; 
+        border: 1px solid {card_border}; 
+        margin-bottom: 18px; 
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12); 
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
     }}
-    .match-card:hover {{ border-color: #38bdf8; }}
+    .match-card:hover {{ 
+        border-color: #38bdf8; 
+        box-shadow: 0 12px 28px rgba(56, 189, 248, 0.2);
+        transform: translateY(-2px);
+    }}
+    
     .analysis-container {{ 
-        background-color: {analysis_bg}; padding: 32px; border-radius: 18px; 
-        border: 1px solid {card_border}; margin-top: 25px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); 
+        background-color: {analysis_bg}; 
+        padding: 35px; 
+        border-radius: 20px; 
+        border: 1px solid {card_border}; 
+        margin-top: 25px; 
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2); 
+        backdrop-filter: blur(12px);
     }}
+    
     .metric-box {{ 
-        background: {metric_bg}; padding: 20px; border-radius: 14px; 
-        border: 1px solid {metric_border}; text-align: center; 
+        background: {metric_bg}; 
+        padding: 20px; 
+        border-radius: 16px; 
+        border: 1px solid {metric_border}; 
+        text-align: center; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }}
+    
     .value-box {{ 
-        background: linear-gradient(135deg, #064e3b 0%, #022c22 100%); 
-        border-left: 6px solid #10b981; padding: 22px; border-radius: 14px; margin-top: 20px; color: #ecfdf5; 
+        background: linear-gradient(135deg, rgba(6, 78, 59, 0.9) 0%, rgba(2, 44, 34, 0.9) 100%); 
+        border-left: 6px solid #10b981; 
+        padding: 22px; 
+        border-radius: 14px; 
+        margin-top: 20px; 
+        color: #ecfdf5; 
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.2);
     }}
+    
     .no-value-box {{ 
-        background: linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%); 
-        border-left: 6px solid #ef4444; padding: 22px; border-radius: 14px; margin-top: 20px; color: #fef2f2; 
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.9) 0%, rgba(69, 10, 10, 0.9) 100%); 
+        border-left: 6px solid #ef4444; 
+        padding: 22px; 
+        border-radius: 14px; 
+        margin-top: 20px; 
+        color: #fef2f2; 
+        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.2);
     }}
+    
     div.row-widget.stRadio div[role="radiogroup"] label p {{ color: {radio_text} !important; font-weight: 600 !important; font-size: 15px !important; }}
-    div.row-widget.stRadio div[role="radiogroup"] label {{ background-color: {radio_bg}; padding: 6px 14px; border-radius: 8px; border: 1px solid {card_border}; margin-right: 8px; }}
+    div.row-widget.stRadio div[role="radiogroup"] label {{ background-color: {radio_bg}; padding: 8px 16px; border-radius: 10px; border: 1px solid {card_border}; margin-right: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }}
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# Header principale
-str_lit.markdown(f"<h1 style='text-align: center; color: {text_app}; font-weight: 800;'>⚽ COMBO MASTER PRO ANALYTICS & AUDIT SUITE</h1>", unsafe_allow_html=True)
-str_lit.markdown(f"<p style='text-align: center; color: {text_muted}; font-size: 16px; margin-bottom: 30px;'>Integrazione completa: Motore Storico, Modello Poisson Avanzato, Monte Carlo Stocastico & Modulo di Audit Isotonico.</p>", unsafe_allow_html=True)
+# Header principale con stile Hero avanzato
+str_lit.markdown(
+    """
+    <div class="hero-container">
+        <div class="hero-title">⚽ COMBO MASTER PRO AI SUITE</div>
+        <div class="hero-subtitle">Piattaforma di Intelligenza Predittiva, Modello Poisson, Simulazione Stocastica Monte Carlo & Analisi Avanzata delle Quote</div>
+    </div>
+""",
+    unsafe_allow_html=True,
+)
 
 LEAGUES = {
     "Serie A (Italia) [Club]": ("SA", "football-data"),
