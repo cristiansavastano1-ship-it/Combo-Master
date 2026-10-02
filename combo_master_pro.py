@@ -1,3 +1,4 @@
+
 import math
 import pandas as pd
 import numpy as np
@@ -86,24 +87,28 @@ str_lit.markdown(
     unsafe_allow_html=True,
 )
 
-# ID ufficiali delle leghe su API-Football (v3)
-LEAGUES_API_FOOTBALL = {
-    "🇮🇹 Serie A (Italia)": 135,
-    "🇬🇧 Premier League (Inghilterra)": 39,
-    "🇪🇸 La Liga (Spagna)": 140,
-    "🇩🇪 Bundesliga (Germania)": 78,
-    "🇫🇷 Ligue 1 (Francia)": 61,
-    "🇪🇺 Champions League": 2,
-    "🌍 UEFA Nations League": 5,
+LEAGUES = {
+    "Serie A (Italia)": ("SA", "football-data"),
+    "Premier League (Inghilterra)": ("PL", "football-data"),
+    "La Liga (Spagna)": ("PD", "football-data"),
+    "Bundesliga (Germania)": ("BL1", "football-data"),
+    "Ligue 1 (Francia)": ("FL1", "football-data"),
+    "Eredivisie (Olanda)": ("DED", "football-data"),
+    "Champions League": ("CL", "football-data"),
 }
 
 str_lit.sidebar.markdown("### ⚙ Configurazione")
-api_key = str_lit.sidebar.text_input("🔑 API-Football Key", value="a759e21b22b937455b034eefb418b123", type="password")
+api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value="d29062443f334e339e7b953ed78a1ac3", type="password")
 str_lit.sidebar.markdown("---")
 
-campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Competizione", list(LEAGUES_API_FOOTBALL.keys()))
-league_id = LEAGUES_API_FOOTBALL[campionato_scelto]
-season_anno = str_lit.sidebar.selectbox("📅 Stagione", [2026, 2025, 2024], index=0)
+modalita_campionati = str_lit.sidebar.radio("🌐 Modalità Campionati", ["Singolo Campionato", "Multi-Campionato (Globale)"])
+
+if modalita_campionati == "Singolo Campionato":
+    campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Campionato", list(LEAGUES.keys()))
+    selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
+else:
+    str_lit.sidebar.markdown("Seleziona i tornei:")
+    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["Serie A (Italia)", "Premier League (Inghilterra)", "Champions League"]))}
 
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
     "📅 Calendario",
@@ -116,36 +121,28 @@ tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_val
     "🛡️ Audit"
 ])
 
-# --- FUNZIONI DI SUPPORTO API-FOOTBALL ---
+# --- FUNZIONI DI SUPPORTO & MODELLAZIONE ---
 @str_lit.cache_data(ttl=3600)
-def scarica_partite_api_football(chiave, id_lega, stagione):
-    if not chiave: return []
-    url = f"https://v3.football.api-sports.io/fixtures"
-    headers = {"x-apisports-key": chiave}
-    params = {"league": id_lega, "season": stagione}
+def scarica_dati_club(chiave, league_code):
+    if not chiave: return None
+    url = f"https://api.football-data.org/v4/competitions/{league_code}/matches"
+    headers = {"X-Auth-Token": chiave}
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            return data.get("response", [])
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200: return res.json()
     except Exception: pass
-    return []
+    return None
 
 @str_lit.cache_data(ttl=3600)
-def scarica_classifica_api_football(chiave, id_lega, stagione):
-    if not chiave: return []
-    url = f"https://v3.football.api-sports.io/standings"
-    headers = {"x-apisports-key": chiave}
-    params = {"league": id_lega, "season": stagione}
+def scarica_classifica_club(chiave, league_code):
+    if not chiave: return None
+    url = f"https://api.football-data.org/v4/competitions/{league_code}/standings"
+    headers = {"X-Auth-Token": chiave}
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            resp = data.get("response", [])
-            if resp:
-                return resp[0].get("league", {}).get("standings", [])
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200: return res.json()
     except Exception: pass
-    return []
+    return None
 
 def poisson_prob(lmbda, k):
     return (math.exp(-lmbda) * (lmbda**k)) / math.factorial(k)
@@ -181,76 +178,52 @@ def calcola_statistiche_avanzate_match(sq_casa, sq_trasf, statistiche_squadre):
 statistiche_squadre = {}
 matches_raw = []
 
-if api_key:
-    fixtures_list = scarica_partite_api_football(api_key, league_id, season_anno)
-    standings_list = scarica_classifica_api_football(api_key, league_id, season_anno)
-    
-    for f in fixtures_list:
-        teams = f.get("teams", {})
-        goals = f.get("goals", {})
-        fixture = f.get("fixture", {})
-        league_info = f.get("league", {})
-        
-        matches_raw.append({
-            "Competizione": campionato_scelto,
-            "matchday": league_info.get("round", "Giornata 1"),
-            "homeTeam": {"name": teams.get("home", {}).get("name", "Casa")},
-            "awayTeam": {"name": teams.get("away", {}).get("name", "Trasferta")},
-            "utcDate": fixture.get("date", ""),
-            "score": {"fullTime": {"home": goals.get("home"), "away": goals.get("away")}},
-            "status": fixture.get("status", {}).get("short", "NS")
-        })
-        
-    for group in standings_list:
-        for row in group:
-            team_name = row.get("team", {}).get("name", "")
-            all_stats = row.get("all", {})
-            played = max(all_stats.get("played", 1), 1)
-            gf = all_stats.get("goals", {}).get("for", 0)
-            ga = all_stats.get("goals", {}).get("against", 0)
-            pts = row.get("points", 0)
-            
-            statistiche_squadre[team_name] = {
-                "media_gf": gf / played,
-                "media_gs": ga / played,
-                "punti": pts,
-                "Competizione": campionato_scelto
-            }
+for c_nome, (codice_lega, tipo_fonte) in selezionati_dict.items():
+    if api_key:
+        dati = scarica_dati_club(api_key, codice_lega)
+        dati_classifica = scarica_classifica_club(api_key, codice_lega)
+        if dati and "matches" in dati: 
+            for m in dati["matches"]:
+                m["Competizione"] = c_nome
+                matches_raw.append(m)
+        if dati_classifica and "standings" in dati_classifica:
+            for s in dati_classifica["standings"]:
+                for riga in s.get("table", []):
+                    nome_sq = riga["team"]["name"]
+                    giocate = max(riga["playedGames"], 1)
+                    statistiche_squadre[nome_sq] = {
+                        "media_gf": riga["goalsFor"] / giocate,
+                        "media_gs": riga["goalsAgainst"] / giocate,
+                        "punti": riga["points"],
+                        "forma": "N/D",
+                        "Competizione": c_nome
+                    }
 
 # --- TAB 1: CALENDARIO & STUDIO ---
 with tab_calendario:
     if matches_raw:
         lista = []
         for m in matches_raw:
-            g_c = m["score"]["fullTime"].get("home")
-            g_t = m["score"]["fullTime"].get("away")
-            
-            # Estrai numero giornata pulito se possibile
-            r_str = str(m.get("matchday", "1"))
-            giornata_num = ''.join(filter(str.isdigit, r_str))
-            giornata_val = int(giornata_num) if giornata_num else 1
-            
+            g_c = m["score"]["fullTime"].get("home") if m.get("score") and m["score"].get("fullTime") else None
+            g_t = m["score"]["fullTime"].get("away") if m.get("score") and m["score"].get("fullTime") else None
             lista.append({
                 "Competizione": m.get("Competizione", "Torneo"),
-                "giornata": giornata_val, 
-                "giornata_txt": r_str,
-                "casa": m["homeTeam"]["name"],
-                "trasferta": m["awayTeam"]["name"], 
-                "data": m["utcDate"][:10] if m["utcDate"] else "N/D",
-                "ora": m["utcDate"][11:16] if len(m["utcDate"]) > 16 else "", 
-                "gol_casa": g_c if g_c is not None else "-",
-                "gol_trasf": g_t if g_t is not None else "-", 
-                "stato": m["status"],
+                "giornata": m.get("matchday", 0), "casa": m["homeTeam"]["name"],
+                "trasferta": m["awayTeam"]["name"], "data": m["utcDate"][:10],
+                "ora": m["utcDate"][11:16], "gol_casa": g_c if g_c is not None else "-",
+                "gol_trasf": g_t if g_t is not None else "-", "stato": m["status"],
             })
         df = pd.DataFrame(lista)
         
         c_f1, c_f2 = str_lit.columns(2)
-        giornate = sorted(df["giornata"].unique())
+        competizioni_disponibili = sorted(df["Competizione"].unique())
+        comp_sel = c_f1.selectbox("🏆 Torneo", competizioni_disponibili)
+        
+        df_comp = df[df["Competizione"] == comp_sel]
+        giornate = sorted(df_comp["giornata"].unique())
         if giornate:
-            giornata_sel = c_f1.selectbox("📅 Seleziona Giornata", giornate)
-            df_giornata = df[df["giornata"] == giornata_sel]
-            
-            for idx, row in df_giornata.iterrows():
+            giornata_sel = c_f2.selectbox("📅 Giornata", giornate)
+            for idx, row in df_comp[df_comp["giornata"] == giornata_sel].iterrows():
                 str_lit.markdown(
                     f"""
                     <div style="background-color: #111827; padding: 18px; border-radius: 12px; border: 1px solid #1f2937; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
@@ -258,7 +231,7 @@ with tab_calendario:
                             <span style="font-weight: 700; font-size: 1.05rem; color: #f3f4f6;">{row['casa']}</span> 
                             <span style="color: #94a3b8; margin: 0 8px;">vs</span> 
                             <span style="font-weight: 700; font-size: 1.05rem; color: #f3f4f6;">{row['trasferta']}</span><br>
-                            <span style="color: #64748b; font-size: 12px;">📅 {row['data']} ore {row['ora']} ({row['giornata_txt']})</span>
+                            <span style="color: #64748b; font-size: 12px;">📅 {row['data']} ore {row['ora']}</span>
                         </div>
                         <div style="text-align: right;">
                             <span style="background-color: #1e293b; color: #38bdf8; padding: 6px 14px; border-radius: 8px; font-weight: 700; font-size: 1.1rem;">{row['gol_casa']} - {row['gol_trasf']}</span>
@@ -270,7 +243,7 @@ with tab_calendario:
                 if str_lit.button("📊 Analizza Match", key=f"btn_{idx}"):
                     str_lit.session_state["match_attivo"] = row
     else:
-        str_lit.info("⚠️ Nessuna partita trovata per questa competizione/stagione tramite API-Football. Verifica la chiave o cambia stagione.")
+        str_lit.info("👈 Inserisci la chiave API nella barra laterale o seleziona un campionato valido.")
 
     if "match_attivo" in str_lit.session_state:
         m = str_lit.session_state["match_attivo"]
@@ -311,7 +284,7 @@ with tab_calendario:
             <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); border: 1px solid #312e81; border-radius: 20px; padding: 25px; margin-top: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 15px; margin-bottom: 20px;">
                     <span style="font-weight: 800; font-size: 1.2rem; color: #f8fafc;">📋 SCHEDA DINAMICA DELLA PARTITA</span>
-                    <span style="color: #94a3b8; font-size: 0.95rem;">📅 {m.get('data', 'N/D')}</span>
+                    <span style="color: #94a3b8; font-size: 0.95rem;">📅 {m.get('data', 'N/D')} - {m.get('ora', '')}</span>
                 </div>
             """,
             unsafe_allow_html=True
@@ -394,7 +367,7 @@ with tab_classifica:
         str_lit.dataframe(df_cls, use_container_width=True, hide_index=True)
         str_lit.download_button("📥 Scarica CSV", df_cls.to_csv(index=False).encode("utf-8"), "classifica.csv", "text/csv")
     else:
-        str_lit.warning("Dati classifica non disponibili per questa competizione.")
+        str_lit.warning("Dati non disponibili.")
 
 # --- TAB 3: VALUE BET ---
 with tab_value:
@@ -433,8 +406,7 @@ with tab_grafici:
 def genera_dataset_valore(matches_list, stats_dict):
     righe = []
     for m in matches_list:
-        h = m["homeTeam"]["name"]
-        a = m["awayTeam"]["name"]
+        h, a = m["homeTeam"]["name"], m["awayTeam"]["name"]
         if h in stats_dict and a in stats_dict:
             lc = stats_dict[h]["media_gf"]
             lt = stats_dict[a]["media_gf"]
@@ -462,13 +434,9 @@ def genera_dataset_valore(matches_list, stats_dict):
             q_book = round(1.03 / max(0.01, prob_scelta), 2)
             edge = round((prob_scelta * q_book - 1) * 100, 1)
             
-            r_str = str(m.get("matchday", "1"))
-            giornata_num = ''.join(filter(str.isdigit, r_str))
-            giornata_val = int(giornata_num) if giornata_num else 1
-            
             righe.append({
                 "Competizione": m.get("Competizione", "Torneo"),
-                "Giornata": giornata_val,
+                "Giornata": m.get("matchday", 1),
                 "Partita": f"{h} vs {a}", 
                 "Selezione": miglior_selezione, 
                 "Prob_Modello": round(prob_scelta * 100, 1), 
@@ -491,7 +459,7 @@ with tab_ai_schedine:
         df_comp_val = df_val[df_val["Competizione"] == comp_schedina]
         giornate_val = sorted(df_comp_val["Giornata"].unique())
         if giornate_val:
-            giornata_schedina = c_s2.selectbox("Giornata Schedina", giornate_val)
+            giornata_schedina = c_s2.selectbox("Giornata", giornate_val)
             df_filtrato_giornata = df_comp_val[df_comp_val["Giornata"] == giornata_schedina]
             if not df_filtrato_giornata.empty:
                 num_ev = str_lit.slider("Eventi in Multipla", 2, min(6, len(df_filtrato_giornata)), min(3, len(df_filtrato_giornata)))
