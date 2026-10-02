@@ -43,15 +43,6 @@ str_lit.markdown(
         border-right: 1px solid #1f2937;
     }
 
-    .custom-card {
-        background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
-        border: 1px solid #374151;
-        border-radius: 16px;
-        padding: 22px;
-        margin-bottom: 16px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-    }
-
     .stButton>button {
         background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
         color: white;
@@ -96,18 +87,16 @@ str_lit.markdown(
 )
 
 LEAGUES = {
-    "Serie A (Italia) [Club]": ("SA", "football-data"),
-    "Premier League (Inghilterra) [Club]": ("PL", "football-data"),
-    "La Liga (Spagna) [Club]": ("PD", "football-data"),
-    "Bundesliga (Germania) [Club]": ("BL1", "football-data"),
-    "Ligue 1 (Francia) [Club]": ("FL1", "football-data"),
-    "Eredivisie (Olanda) [Club]": ("DED", "football-data"),
-    "Champions League [Club]": ("CL", "football-data"),
-    "UEFA Nations League [Nazionali Ufficiali]": ("UNL", "football-data"),
+    "Serie A (Italia)": ("SA", "football-data"),
+    "Premier League (Inghilterra)": ("PL", "football-data"),
+    "La Liga (Spagna)": ("PD", "football-data"),
+    "Bundesliga (Germania)": ("BL1", "football-data"),
+    "Ligue 1 (Francia)": ("FL1", "football-data"),
+    "Eredivisie (Olanda)": ("DED", "football-data"),
+    "Champions League": ("CL", "football-data"),
 }
 
 str_lit.sidebar.markdown("### ⚙ Configurazione")
-# API key pre-inserita automaticamente
 api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value="d29062443f334e339e7b953ed78a1ac3", type="password")
 str_lit.sidebar.markdown("---")
 
@@ -118,7 +107,7 @@ if modalita_campionati == "Singolo Campionato":
     selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
 else:
     str_lit.sidebar.markdown("Seleziona i tornei:")
-    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["Serie A (Italia) [Club]", "Premier League (Inghilterra) [Club]"]))}
+    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["Serie A (Italia)", "Premier League (Inghilterra)"]))}
 
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
     "📅 Calendario",
@@ -287,7 +276,6 @@ with tab_calendario:
         p_c, p_p, p_t = (p_c/tot)*100, (p_p/tot)*100, (p_t/tot)*100
         prob_btts_no = 1.0 - prob_btts_yes
 
-        # SCHEDA DINAMICA DELLA PARTITA CON STATISTICHE CALCOLATE
         stats_match = calcola_statistiche_avanzate_match(sq_c, sq_t, statistiche_squadre)
 
         str_lit.markdown(
@@ -414,7 +402,6 @@ with tab_grafici:
         fig = px.bar(df_g, x="Squadra", y="Punti", color="Media Gol Fatti", template="plotly_dark", title="Punti e Potenziale Offensivo")
         str_lit.plotly_chart(fig, use_container_width=True)
 
-# --- FUNZIONE CORRETTA: Calcolo Poisson reale per ogni esito 1X2 ---
 def genera_dataset_valore(matches_list, stats_dict):
     righe = []
     for m in matches_list:
@@ -489,7 +476,7 @@ with tab_value_finder:
     else:
         str_lit.info("Nessun incontro disponibile.")
 
-# --- TAB 7: MONTE CARLO AGGIORNATO ---
+# --- TAB 7: MONTE CARLO ---
 with tab_monte_carlo:
     str_lit.subheader("🎲 Simulatore Monte Carlo Avanzato")
     if statistiche_squadre:
