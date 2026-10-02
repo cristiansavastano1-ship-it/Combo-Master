@@ -1,6 +1,3 @@
-
-    else:
-        str_lit.info("Carica i dati per visualizzare l'audit.")
 import math
 import pandas as pd
 import numpy as np
