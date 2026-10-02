@@ -1,3 +1,4 @@
+
 import math
 import pandas as pd
 import numpy as np
@@ -378,24 +379,50 @@ with tab_grafici:
         fig = px.bar(df_g, x="Squadra", y="Punti", color="Media Gol Fatti", template="plotly_dark", title="Punti e Potenziale Offensivo")
         str_lit.plotly_chart(fig, use_container_width=True)
 
-# Dataset di supporto per le funzioni successive
+# --- FUNZIONE CORRETTA: Calcolo Poisson reale per ogni esito 1X2 ---
 def genera_dataset_valore(matches_list, stats_dict):
     righe = []
     for m in matches_list:
         h, a = m["homeTeam"]["name"], m["awayTeam"]["name"]
         if h in stats_dict and a in stats_dict:
-            lc, lt = stats_dict[h]["media_gf"], stats_dict[a]["media_gf"]
-            pc = sum(poisson_prob(lc, rc) * poisson_prob(lt, rt) for rc in range(5) for rt in range(5) if rc > rt)
-            tot = pc + 0.35 + 0.30
-            prob = max(0.25, min(0.85, pc / tot))
-            q_book = round(1.03 / prob, 2)
+            lc = stats_dict[h]["media_gf"]
+            lt = stats_dict[a]["media_gf"]
+            
+            p_c, p_p, p_t = 0.0, 0.0, 0.0
+            for rc in range(6):
+                for rt in range(6):
+                    prob = poisson_prob(lc, rc) * poisson_prob(lt, rt)
+                    if rc > rt: p_c += prob
+                    elif rc == rt: p_p += prob
+                    else: p_t += prob
+            
+            tot_prob = p_c + p_p + p_t
+            if tot_prob > 0:
+                p_c, p_p, p_t = p_c / tot_prob, p_p / tot_prob, p_t / tot_prob
+            
+            # Individuiamo l'esito più probabile calcolato da Poisson
+            esiti = [
+                (f"1 ({h})", p_c),
+                (f"X (Pareggio)", p_p),
+                (f"2 ({a})", p_t)
+            ]
+            esiti.sort(key=lambda x: x[1], reverse=True)
+            miglior_selezione, prob_scelta = esiti[0]
+            
+            # Generazione coerente della quota bookmaker stimata basata sulla probabilità reale + margine
+            q_book = round(1.03 / max(0.01, prob_scelta), 2)
+            edge = round((prob_scelta * q_book - 1) * 100, 1)
+            
             righe.append({
                 "Competizione": m.get("Competizione", "Torneo"),
                 "Giornata": m.get("matchday", 1),
                 "Partita": f"{h} vs {a}", 
-                "Selezione": f"1 ({h})", "Prob_Modello": round(prob*100, 1), 
-                "Quota_Book": q_book, "Edge": round((prob*q_book - 1)*100, 1)
+                "Selezione": miglior_selezione, 
+                "Prob_Modello": round(prob_scelta * 100, 1), 
+                "Quota_Book": q_book, 
+                "Edge": edge
             })
+            
     if not righe:
         return pd.DataFrame(columns=["Competizione", "Giornata", "Partita", "Selezione", "Prob_Modello", "Quota_Book", "Edge"])
     return pd.DataFrame(righe)
