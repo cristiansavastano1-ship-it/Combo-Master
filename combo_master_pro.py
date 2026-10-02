@@ -1,4 +1,3 @@
-
 import math
 import pandas as pd
 import numpy as np
@@ -400,7 +399,6 @@ def genera_dataset_valore(matches_list, stats_dict):
             if tot_prob > 0:
                 p_c, p_p, p_t = p_c / tot_prob, p_p / tot_prob, p_t / tot_prob
             
-            # Individuiamo l'esito più probabile calcolato da Poisson
             esiti = [
                 (f"1 ({h})", p_c),
                 (f"X (Pareggio)", p_p),
@@ -409,7 +407,6 @@ def genera_dataset_valore(matches_list, stats_dict):
             esiti.sort(key=lambda x: x[1], reverse=True)
             miglior_selezione, prob_scelta = esiti[0]
             
-            # Generazione coerente della quota bookmaker stimata basata sulla probabilità reale + margine
             q_book = round(1.03 / max(0.01, prob_scelta), 2)
             edge = round((prob_scelta * q_book - 1) * 100, 1)
             
@@ -456,30 +453,69 @@ with tab_value_finder:
     else:
         str_lit.info("Nessun incontro disponibile.")
 
-# --- TAB 7: MONTE CARLO ---
+# --- TAB 7: MONTE CARLO AGGIORNATO (Tutti i risultati e mercati completi) ---
 with tab_monte_carlo:
-    str_lit.subheader("🎲 Simulatore Monte Carlo")
+    str_lit.subheader("🎲 Simulatore Monte Carlo Avanzato")
     if statistiche_squadre:
         nomi = sorted(list(statistiche_squadre.keys()))
         c1, c2, c3 = str_lit.columns(3)
-        sq_c = c1.selectbox("Casa", nomi, index=0)
-        sq_t = c2.selectbox("Trasferta", nomi, index=min(1, len(nomi)-1))
-        iterazioni = c3.slider("Iterazioni", 1000, 10000, 5000, step=1000)
+        sq_c = c1.selectbox("Casa", nomi, index=0, key="mc_casa")
+        sq_t = c2.selectbox("Trasferta", nomi, index=min(1, len(nomi)-1), key="mc_trasf")
+        iterazioni = c3.slider("Iterazioni", 1000, 20000, 5000, step=1000, key="mc_iter")
         
-        if str_lit.button("🚀 Esegui Simulazione"):
+        if str_lit.button("🚀 Esegui Simulazione", key="btn_mc"):
             lc = statistiche_squadre[sq_c]["media_gf"] * 1.05
             lt = statistiche_squadre[sq_t]["media_gf"] * 0.95
+            
+            # Generazione simulazioni con Poisson
             gc_sim = np.random.poisson(lc, iterazioni)
             gt_sim = np.random.poisson(lt, iterazioni)
             
+            # Calcolo metriche 1X2
             v_c = np.sum(gc_sim > gt_sim) / (iterazioni / 100)
             v_p = np.sum(gc_sim == gt_sim) / (iterazioni / 100)
             v_t = np.sum(gc_sim < gt_sim) / (iterazioni / 100)
             
+            # Calcolo mercati Under/Over e BTTS
+            tot_gol = gc_sim + gt_sim
+            p_over15 = np.sum(tot_gol > 1.5) / (iterazioni / 100)
+            p_over25 = np.sum(tot_gol > 2.5) / (iterazioni / 100)
+            p_btts = np.sum((gc_sim > 0) & (gt_sim > 0)) / (iterazioni / 100)
+            
+            str_lit.markdown("#### 📊 Esiti 1X2 dalle Simulazioni")
             m1, m2, m3 = str_lit.columns(3)
-            m1.metric("Vittoria Casa", f"{v_c:.1f}%")
-            m2.metric("Pareggio", f"{v_p:.1f}%")
-            m3.metric("Vittoria Trasferta", f"{v_t:.1f}%")
+            m1.metric("Vittoria Casa (1)", f"{v_c:.1f}%", f"Quota equa: {100/v_c:.2f}" if v_c > 0 else "N.D.")
+            m2.metric("Pareggio (X)", f"{v_p:.1f}%", f"Quota equa: {100/v_p:.2f}" if v_p > 0 else "N.D.")
+            m3.metric("Vittoria Trasferta (2)", f"{v_t:.1f}%", f"Quota equa: {100/v_t:.2f}" if v_t > 0 else "N.D.")
+            
+            str_lit.markdown("<br>", unsafe_allow_html=True)
+            str_lit.markdown("#### ⚽ Mercati di Gol (Simulati)")
+            uo1, uo2, uo3 = str_lit.columns(3)
+            uo1.metric("Over 1.5 Gol", f"{p_over15:.1f}%")
+            uo2.metric("Over 2.5 Gol", f"{p_over25:.1f}%")
+            uo3.metric("Goal (BTTS)", f"{p_btts:.1f}%")
+            
+            str_lit.markdown("<br>", unsafe_allow_html=True)
+            str_lit.markdown("#### 🎯 Top 3 Risultati Esatti più Frequenti")
+            
+            # Estrazione dei 3 risultati esatti con maggiore frequenza nella simulazione
+            risultati_coppie = list(zip(gc_sim, gt_sim))
+            conteggio_esatti = pd.Series(risultati_coppie).value_counts().head(3)
+            
+            r_col1, r_col2, r_col3 = str_lit.columns(3)
+            colonne_res = [r_col1, r_col2, r_col3]
+            
+            for idx, ((rc, rt), count) in enumerate(conteggio_esatti.items()):
+                perc = (count / iterazioni) * 100
+                with colonne_res[idx]:
+                    medaglia = ["🥇", "🥈", "🥉"][idx]
+                    str_lit.info(f"{medaglia} **{rc} - {rt}** ({perc:.1f}% delle volte)")
+            
+            # Grafico della distribuzione dei gol totali
+            str_lit.markdown("<br>", unsafe_allow_html=True)
+            df_dist = pd.DataFrame({"Gol Totali": tot_gol})
+            fig_mc = px.histogram(df_dist, x="Gol Totali", nbins=int(max(tot_gol))+1, title="Distribuzione Frequenza Gol Totali (Iterazioni Monte Carlo)", template="plotly_dark")
+            str_lit.plotly_chart(fig_mc, use_container_width=True)
 
 # --- TAB 8: AUDIT ---
 with tab_audit:
