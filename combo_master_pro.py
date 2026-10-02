@@ -103,11 +103,12 @@ LEAGUES = {
     "Ligue 1 (Francia) [Club]": ("FL1", "football-data"),
     "Eredivisie (Olanda) [Club]": ("DED", "football-data"),
     "Champions League [Club]": ("CL", "football-data"),
-    "UEFA Nations League [Nazionali - Dataset Ufficiale]": ("UNL", "hybrid-national"),
+    "UEFA Nations League [Nazionali Ufficiali]": ("UNL", "football-data"),
 }
 
-str_lit.sidebar.markdown("### ⚙️ Configurazione")
-api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", type="password")
+str_lit.sidebar.markdown("### ⚙ Configurazione")
+# API key pre-inserita automaticamente
+api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value="d29062443f334e339e7b953ed78a1ac3", type="password")
 str_lit.sidebar.markdown("---")
 
 modalita_campionati = str_lit.sidebar.radio("🌐 Modalità Campionati", ["Singolo Campionato", "Multi-Campionato (Globale)"])
@@ -153,23 +154,6 @@ def scarica_classifica_club(chiave, league_code):
     except Exception: pass
     return None
 
-def get_dati_nations_league_reali():
-    matches_hybrid = [
-        {"matchday": 1, "homeTeam": {"name": "Italia"}, "awayTeam": {"name": "Belgio"}, "utcDate": "2026-09-25T20:45:00Z", "score": {"fullTime": {"home": 0, "away": 2}}, "status": "FINISHED"},
-        {"matchday": 1, "homeTeam": {"name": "Turchia"}, "awayTeam": {"name": "Francia"}, "utcDate": "2026-09-25T20:45:00Z", "score": {"fullTime": {"home": 0, "away": 1}}, "status": "FINISHED"},
-        {"matchday": 1, "homeTeam": {"name": "Paesi Bassi"}, "awayTeam": {"name": "Germania"}, "utcDate": "2026-09-24T20:45:00Z", "score": {"fullTime": {"home": 1, "away": 1}}, "status": "FINISHED"},
-        {"matchday": 1, "homeTeam": {"name": "Serbia"}, "awayTeam": {"name": "Grecia"}, "utcDate": "2026-09-24T20:45:00Z", "score": {"fullTime": {"home": 1, "away": 2}}, "status": "FINISHED"},
-        {"matchday": 2, "homeTeam": {"name": "Belgio"}, "awayTeam": {"name": "Francia"}, "utcDate": "2026-09-28T20:45:00Z", "score": {"fullTime": {"home": None, "away": None}}, "status": "TIMED"},
-        {"matchday": 2, "homeTeam": {"name": "Turchia"}, "awayTeam": {"name": "Italia"}, "utcDate": "2026-09-28T20:45:00Z", "score": {"fullTime": {"home": None, "away": None}}, "status": "TIMED"},
-    ]
-    standings_hybrid = {
-        "Belgio": {"punti": 3, "gf": 2, "gs": 0}, "Francia": {"punti": 3, "gf": 1, "gs": 0},
-        "Turchia": {"punti": 0, "gf": 0, "gs": 1}, "Italia": {"punti": 0, "gf": 0, "gs": 2},
-        "Germania": {"punti": 1, "gf": 1, "gs": 1}, "Paesi Bassi": {"punti": 4, "gf": 3, "gs": 2},
-        "Grecia": {"punti": 3, "gf": 2, "gs": 1}, "Serbia": {"punti": 0, "gf": 2, "gs": 4}
-    }
-    return matches_hybrid, standings_hybrid
-
 def poisson_prob(lmbda, k):
     return (math.exp(-lmbda) * (lmbda**k)) / math.factorial(k)
 
@@ -205,37 +189,25 @@ statistiche_squadre = {}
 matches_raw = []
 
 for c_nome, (codice_lega, tipo_fonte) in selezionati_dict.items():
-    if tipo_fonte == "football-data":
-        if api_key:
-            dati = scarica_dati_club(api_key, codice_lega)
-            dati_classifica = scarica_classifica_club(api_key, codice_lega)
-            if dati and "matches" in dati: 
-                for m in dati["matches"]:
-                    m["Competizione"] = c_nome
-                    matches_raw.append(m)
-            if dati_classifica and "standings" in dati_classifica:
-                for s in dati_classifica["standings"]:
-                    for riga in s.get("table", []):
-                        nome_sq = riga["team"]["name"]
-                        giocate = max(riga["playedGames"], 1)
-                        statistiche_squadre[nome_sq] = {
-                            "media_gf": riga["goalsFor"] / giocate,
-                            "media_gs": riga["goalsAgainst"] / giocate,
-                            "punti": riga["points"],
-                            "forma": "N/D",
-                            "Competizione": c_nome
-                        }
-    elif tipo_fonte == "hybrid-national":
-        m_hyb, s_hyb = get_dati_nations_league_reali()
-        for m in m_hyb:
-            m["Competizione"] = c_nome
-            matches_raw.append(m)
-        for sq, info in s_hyb.items():
-            giocate = max(info["punti"] // 3, 1) if info["punti"] > 0 else 1
-            statistiche_squadre[sq] = {
-                "media_gf": info["gf"] / giocate, "media_gs": info["gs"] / giocate,
-                "punti": info["punti"], "forma": "N/D", "Competizione": c_nome
-            }
+    if api_key:
+        dati = scarica_dati_club(api_key, codice_lega)
+        dati_classifica = scarica_classifica_club(api_key, codice_lega)
+        if dati and "matches" in dati: 
+            for m in dati["matches"]:
+                m["Competizione"] = c_nome
+                matches_raw.append(m)
+        if dati_classifica and "standings" in dati_classifica:
+            for s in dati_classifica["standings"]:
+                for riga in s.get("table", []):
+                    nome_sq = riga["team"]["name"]
+                    giocate = max(riga["playedGames"], 1)
+                    statistiche_squadre[nome_sq] = {
+                        "media_gf": riga["goalsFor"] / giocate,
+                        "media_gs": riga["goalsAgainst"] / giocate,
+                        "punti": riga["points"],
+                        "forma": "N/D",
+                        "Competizione": c_nome
+                    }
 
 # --- TAB 1: CALENDARIO & STUDIO ---
 with tab_calendario:
