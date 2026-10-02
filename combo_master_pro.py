@@ -98,8 +98,16 @@ LEAGUES = {
 
 api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org - Club)", type="password")
 str_lit.sidebar.markdown("---")
-campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Campionato / Torneo", list(LEAGUES.keys()))
-codice_lega, tipo_fonte = LEAGUES[campionato_scelto]
+
+# Selezione multi-campionato o singolo campionato
+modalita_campionati = str_lit.sidebar.radio("🌐 Modalità Campionati", ["Singolo Campionato", "Multi-Campionato (Globale)"])
+
+if modalita_campionati == "Singolo Campionato":
+    campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Campionato", list(LEAGUES.keys()))
+    selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
+else:
+    str_lit.sidebar.markdown("Seleziona i tornei da includere nell'analisi globale:")
+    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["Serie A (Italia) [Club]", "Premier League (Inghilterra) [Club]"]))}
 
 # Tab di Navigazione Completi
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
@@ -170,67 +178,81 @@ def calcola_forma_recente(matches_list, nome_squadra):
                     partite_squadra.append(res)
     return "".join(partite_squadra[-5:]) if partite_squadra else "N/D"
 
-# --- ACQUISIZIONE DATI UNIFICATA ---
+# --- ACQUISIZIONE DATI AGGREGATA ---
 statistiche_squadre = {}
 matches_raw = []
 
-if tipo_fonte == "football-data":
-    if api_key:
-        dati = scarica_dati_club(api_key, codice_lega)
-        dati_classifica = scarica_classifica_club(api_key, codice_lega)
-        if dati and "matches" in dati: matches_raw = dati["matches"]
-        if dati_classifica and "standings" in dati_classifica:
-            for s in dati_classifica["standings"]:
-                for riga in s.get("table", []):
-                    nome_sq = riga["team"]["name"]
-                    giocate = max(riga["playedGames"], 1)
-                    statistiche_squadre[nome_sq] = {
-                        "media_gf": riga["goalsFor"] / giocate,
-                        "media_gs": riga["goalsAgainst"] / giocate,
-                        "punti": riga["points"],
-                        "forma": calcola_forma_recente(matches_raw, nome_sq),
-                    }
-elif tipo_fonte == "hybrid-national":
-    matches_raw, standings_raw = get_dati_nations_league_reali()
-    for sq, info in standings_raw.items():
-        giocate = max(info["punti"] // 3, 1) if info["punti"] > 0 else 1
-        statistiche_squadre[sq] = {
-            "media_gf": info["gf"] / giocate, "media_gs": info["gs"] / giocate,
-            "punti": info["punti"], "forma": calcola_forma_recente(matches_raw, sq),
-        }
+for c_nome, (codice_lega, tipo_fonte) in selezionati_dict.items():
+    if tipo_fonte == "football-data":
+        if api_key:
+            dati = scarica_dati_club(api_key, codice_lega)
+            dati_classifica = scarica_classifica_club(api_key, codice_lega)
+            if dati and "matches" in dati: 
+                for m in dati["matches"]:
+                    m["competizione"] = c_nome
+                    matches_raw.append(m)
+            if dati_classifica and "standings" in dati_classifica:
+                for s in dati_classifica["standings"]:
+                    for riga in s.get("table", []):
+                        nome_sq = riga["team"]["name"]
+                        giocate = max(riga["playedGames"], 1)
+                        statistiche_squadre[nome_sq] = {
+                            "media_gf": riga["goalsFor"] / giocate,
+                            "media_gs": riga["goalsAgainst"] / giocate,
+                            "punti": riga["points"],
+                            "forma": "N/D",
+                            "competizione": c_nome
+                        }
+    elif tipo_fonte == "hybrid-national":
+        m_hyb, s_hyb = get_dati_nations_league_reali()
+        for m in m_hyb:
+            m["competizione"] = c_nome
+            matches_raw.append(m)
+        for sq, info in s_hyb.items():
+            giocate = max(info["punti"] // 3, 1) if info["punti"] > 0 else 1
+            statistiche_squadre[sq] = {
+                "media_gf": info["gf"] / giocate, "media_gs": info["gs"] / giocate,
+                "punti": info["punti"], "forma": "N/D", "competizione": c_nome
+            }
 
 # --- TAB 1: CALENDARIO & STUDIO DETTAGLIATO ---
 with tab_calendario:
-    condizione_ok = (tipo_fonte == "football-data" and api_key) or (tipo_fonte == "hybrid-national")
-    if condizione_ok and matches_raw:
+    if matches_raw:
         lista = []
         for m in matches_raw:
             g_c = m["score"]["fullTime"].get("home") if m.get("score") and m["score"].get("fullTime") else None
             g_t = m["score"]["fullTime"].get("away") if m.get("score") and m["score"].get("fullTime") else None
             lista.append({
+                "competizione": m.get("competizione", "Torneo"),
                 "giornata": m.get("matchday", 0), "casa": m["homeTeam"]["name"],
                 "trasferta": m["awayTeam"]["name"], "data": m["utcDate"][:10],
                 "ora": m["utcDate"][11:16], "gol_casa": g_c if g_c is not None else "-",
                 "gol_trasf": g_t if g_t is not None else "-", "stato": m["status"],
             })
         df = pd.DataFrame(lista)
-        giornate = sorted(df["giornata"].unique())
+        
+        c_f1, c_f2 = str_lit.columns(2)
+        competizioni_disponibili = sorted(df["competizione"].unique())
+        comp_sel = c_f1.selectbox("🏆 Filtra per Torneo", competizioni_disponibili)
+        
+        df_comp = df[df["competizione"] == comp_sel]
+        giornate = sorted(df_comp["giornata"].unique())
         if giornate:
-            giornata_sel = str_lit.selectbox("📅 Seleziona Giornata / Turno", giornate)
-            for idx, row in df[df["giornata"] == giornata_sel].iterrows():
+            giornata_sel = c_f2.selectbox("📅 Seleziona Giornata Specifica", giornate)
+            for idx, row in df_comp[df_comp["giornata"] == giornata_sel].iterrows():
                 str_lit.markdown('<div class="match-card">', unsafe_allow_html=True)
                 c1, c2, c3 = str_lit.columns([3, 2, 2])
                 with c1:
-                    str_lit.markdown(f"🏠 **{row['casa']}**<br>✈️ **{row['trasferta']}**<br><span style='color:{text_muted}; font-size:12px;'>📅 {row['data']} ore {row['ora']}</span>", unsafe_allow_html=True)
+                    str_lit.markdown(f"🏠 **{row['casa']}**<br>✈️ **{row['trasferta']}**<br><span style='color:{text_muted}; font-size:12px;'>📅 {row['data']} ore {row['ora']} [{row['competizione']}]</span>", unsafe_allow_html=True)
                 with c2:
                     str_lit.markdown(f"<br>Risultato: <b style='font-size:18px; color:#38bdf8;'>{row['gol_casa']} - {row['gol_trasf']}</b>", unsafe_allow_html=True)
                 with c3:
                     str_lit.markdown("<br>", unsafe_allow_html=True)
-                    if str_lit.button("📊 Analisi Match", key=f"btn_{idx}"):
+                    if str_lit.button("📊 Analizza Match", key=f"btn_{idx}"):
                         str_lit.session_state["match_attivo"] = row
                 str_lit.markdown('</div>', unsafe_allow_html=True)
     else:
-        str_lit.info("👈 Inserisci la chiave API nella barra laterale o seleziona la Nations League.")
+        str_lit.info("👈 Seleziona almeno un campionato e inserisci la chiave API se richiesto.")
 
     if "match_attivo" in str_lit.session_state:
         m = str_lit.session_state["match_attivo"]
@@ -273,13 +295,13 @@ with tab_calendario:
 # --- TAB 2: CLASSIFICA ---
 with tab_classifica:
     str_lit.subheader("🏆 Classifica Generale e Analisi Rendimento")
-    if condizione_ok and statistiche_squadre:
+    if statistiche_squadre:
         df_cls = pd.DataFrame([{
+            "Competizione": v.get("competizione", "Torneo"),
             "Squadra": k, "Punti": v["punti"], 
             "Media GF": round(v["media_gf"], 2), 
             "Media GS": round(v["media_gs"], 2), 
-            "Differenza Reti": round(v["media_gf"] - v["media_gs"], 2),
-            "Forma": v["forma"]
+            "Differenza Reti": round(v["media_gf"] - v["media_gs"], 2)
         } for k, v in sorted(statistiche_squadre.items(), key=lambda x: x[1]["punti"], reverse=True)])
         str_lit.dataframe(df_cls, use_container_width=True, hide_index=True)
         str_lit.download_button("📥 Scarica Classifica CSV", df_cls.to_csv(index=False).encode("utf-8"), "classifica_master.csv", "text/csv")
@@ -296,8 +318,6 @@ with tab_value:
     
     q_equa = 100 / p_stim
     ev = ((p_stim / 100) * q_book) - 1
-    
-    # Criterio di Kelly frazionato (es. 25%) corretto nell'indentazione
     b = q_book - 1
     p = p_stim / 100
     q = 1 - p
@@ -317,12 +337,12 @@ with tab_value:
 # --- TAB 4: GRAFICI ---
 with tab_grafici:
     str_lit.subheader("📊 Analisi Grafica & Trend Prestazionali")
-    if condizione_ok and statistiche_squadre:
+    if statistiche_squadre:
         df_g = pd.DataFrame([{"Squadra": k, "Punti": v["punti"], "Media Gol Fatti": v["media_gf"]} for k, v in statistiche_squadre.items()])
         fig = px.bar(df_g, x="Squadra", y="Punti", color="Media Gol Fatti", template=plotly_template, title="Punti e Potenziale Offensivo per Squadra")
         str_lit.plotly_chart(fig, use_container_width=True)
 
-# Generatore Dataset Value Finder
+# Generatore Dataset Value Finder filtrato per Giornata specifica
 def genera_dataset_valore(matches_list, stats_dict):
     righe = []
     for m in matches_list:
@@ -334,7 +354,9 @@ def genera_dataset_valore(matches_list, stats_dict):
             prob = max(0.25, min(0.85, pc / tot))
             q_book = round(1.03 / prob, 2)
             righe.append({
-                "Partita": f"{h} vs {a}", "Giornata": m.get("matchday", 1), 
+                "Competizione": m.get("competizione", "Torneo"),
+                "Giornata": m.get("matchday", 1),
+                "Partita": f"{h} vs {a}", 
                 "Selezione": f"1 ({h})", "Prob_Modello": round(prob*100, 1), 
                 "Quota_Book": q_book, "Edge": round((prob*q_book - 1)*100, 1)
             })
@@ -342,18 +364,30 @@ def genera_dataset_valore(matches_list, stats_dict):
 
 df_val = genera_dataset_valore(matches_raw, statistiche_squadre)
 
-# --- TAB 5: SCHEDINE SMART ---
+# --- TAB 5: SCHEDINE SMART (FILTRATE PER GIORNATA E CAMPIONATO) ---
 with tab_ai_schedine:
-    str_lit.subheader("🤖 Generatore Schedine Smart & Combo AI")
-    str_lit.markdown("Seleziona i palinsesti a maggiore valore statistico per costruire accumulatori ottimizzati.")
+    str_lit.subheader("🤖 Generatore Schedine Smart & Combo AI per Giornata")
+    str_lit.markdown("Seleziona il torneo e la giornata specifica per generare schedine mirate.")
     if not df_val.empty:
-        num_ev = str_lit.slider("Numero di eventi in Multipla", 2, 6, 3)
-        df_sorted = df_val.sort_values(by="Edge", ascending=False)
-        subset = df_sorted.head(num_ev)
-        quota_totale = np.prod(subset['Quota_Book'].values)
+        c_s1, c_s2 = str_lit.columns(2)
+        comp_schedina = c_s1.selectbox("Seleziona Torneo per Schedina", sorted(df_val["competizione"].unique()))
+        df_comp_val = df_val[df_val["competizione"] == comp_schedina]
         
-        str_lit.metric("📈 Quota Totale Accumulatore", f"{quota_totale:.2f}")
-        str_lit.dataframe(subset, use_container_width=True, hide_index=True)
+        giornate_val = sorted(df_comp_val["Giornata"].unique())
+        giornata_schedina = c_s2.selectbox("Seleziona Giornata Specifica", giornate_val)
+        
+        df_filtrato_giornata = df_comp_val[df_comp_val["Giornata"] == giornata_schedina]
+        
+        if not df_filtrato_giornata.empty:
+            num_ev = str_lit.slider("Numero di eventi in Multipla", 2, min(6, len(df_filtrato_giornata)), min(3, len(df_filtrato_giornata)))
+            df_sorted = df_filtrato_giornata.sort_values(by="Edge", ascending=False)
+            subset = df_sorted.head(num_ev)
+            quota_totale = np.prod(subset['Quota_Book'].values)
+            
+            str_lit.metric(f"📈 Quota Totale Accumulatore - Giornata {giornata_schedina}", f"{quota_totale:.2f}")
+            str_lit.dataframe(subset, use_container_width=True, hide_index=True)
+        else:
+            str_lit.warning("Nessuna partita valida trovata per questa giornata.")
     else:
         str_lit.info("Carica i dati di campionato per generare le combinazioni.")
 
@@ -368,10 +402,10 @@ with tab_value_finder:
     else:
         str_lit.info("Nessun incontro disponibile per lo scanning.")
 
-# --- TAB 7: MONTE CARLO ---
+# --- TAB 7: MONTE CARLO (CON RISULTATI ESATTI SIMULATI) ---
 with tab_monte_carlo:
-    str_lit.subheader("🎲 Simulatore Stocastico Monte Carlo & Match Flow Avanzato")
-    str_lit.markdown("Simula 10.000 iterazioni stocastiche basate sulle distribuzioni di Poisson per calcolare scenari probabilistici complessi.")
+    str_lit.subheader("🎲 Simulatore Stocastico Monte Carlo & Risultati Esatti")
+    str_lit.markdown("Simula migliaia di iterazioni per stimare i punteggi esatti più probabili basati sulla stocastica.")
     if statistiche_squadre:
         nomi = sorted(list(statistiche_squadre.keys()))
         c1, c2, c3 = str_lit.columns(3)
@@ -379,7 +413,7 @@ with tab_monte_carlo:
         sq_t = c2.selectbox("Squadra in Trasferta", nomi, index=min(1, len(nomi)-1))
         iterazioni = c3.slider("Numero Simulazioni", 1000, 10000, 5000, step=1000)
         
-        if str_lit.button("🚀 Esegui Simulazione Monte Carlo"):
+        if str_lit.button("🚀 Esegui Simulazione Monte Carlo Avanzata"):
             lc = statistiche_squadre[sq_c]["media_gf"] * 1.05
             lt = statistiche_squadre[sq_t]["media_gf"] * 0.95
             
@@ -401,12 +435,26 @@ with tab_monte_carlo:
             sub1, sub2 = str_lit.columns(2)
             sub1.metric("Probabilità Over 2.5", f"{over_25:.1f}%")
             sub2.metric("Probabilità Goal (BTTS)", f"{btts:.1f}%")
+            
+            # Calcolo dei Risultati Esatti dalla Simulazione
+            str_lit.markdown("---")
+            str_lit.markdown("#### 🎯 Top 4 Risultati Esatti più Frequenti (Simulazione Monte Carlo)")
+            
+            df_simulazioni = pd.DataFrame({"casa": gc_sim, "trasferta": gt_sim})
+            conteggio_esatti = df_simulazioni.value_counts().reset_index(name="conteggio")
+            conteggio_esatti["percentuale"] = (conteggio_esatti["conteggio"] / iterazioni) * 100
+            conteggio_esatti = conteggio_esatti.sort_values(by="conteggio", ascending=False).head(4)
+            
+            col_res = str_lit.columns(4)
+            for i, (_, row_res) in enumerate(conteggio_esatti.iterrows()):
+                with col_res[i]:
+                    str_lit.info(f"**{int(row_res['casa'])} - {int(row_res['trasferta'])}**\n\nProb: **{row_res['percentuale']:.1f}%**")
     else:
         str_lit.info("Dati squadre non disponibili per le simulazioni.")
 
 # --- TAB 8: AUDIT & CALIBRAZIONE ---
 with tab_audit:
-    str_lit.subheader("🛡️ Modulo di Audit & Validazione Statistica Avanzata")
+    str_lit.subheader("🛡️️ Modulo di Audit & Validazione Statistica Avanzata")
     str_lit.markdown("Questo modulo implementa i controlli di qualità e le metriche attuariali per verificare l'assenza di distorsioni (overconfidence) nel modello previsionale.")
     
     if not df_val.empty:
