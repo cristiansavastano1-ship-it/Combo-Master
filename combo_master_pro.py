@@ -1,4 +1,6 @@
 
+    else:
+        str_lit.info("Carica i dati per visualizzare l'audit.")
 import math
 import pandas as pd
 import numpy as np
@@ -18,38 +20,32 @@ str_lit.set_page_config(
 str_lit.markdown(
     """
     <style>
-    /* Import Google Fonts per un look pulito */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
 
-    /* Nascondi menu nativo e footer di Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Sfondo generale dell'app */
     .stApp {
         background-color: #0b0f19;
         color: #f3f4f6;
     }
     
-    /* Container principale */
     .block-container {
         padding-top: 2rem;
         padding-bottom: 3rem;
         max-width: 1250px;
     }
 
-    /* Sidebar personalizzata */
     [data-testid="stSidebar"] {
         background-color: #111827;
         border-right: 1px solid #1f2937;
     }
 
-    /* Card in stile Dashboard Moderna */
     .custom-card {
         background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
         border: 1px solid #374151;
@@ -59,7 +55,6 @@ str_lit.markdown(
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
     }
 
-    /* Bottoni moderni */
     .stButton>button {
         background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
         color: white;
@@ -76,7 +71,6 @@ str_lit.markdown(
         transform: translateY(-1px);
     }
 
-    /* Metriche stilizzate */
     [data-testid="stMetric"] {
         background-color: #111827;
         border: 1px solid #1f2937;
@@ -93,7 +87,7 @@ str_lit.markdown(
     unsafe_allow_html=True,
 )
 
-# Header principale in stile App Moderna
+# Header principale
 str_lit.markdown(
     """
     <div style="background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); padding: 35px; border-radius: 20px; border: 1px solid #312e81; text-align: center; margin-bottom: 30px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);">
@@ -115,7 +109,6 @@ LEAGUES = {
     "UEFA Nations League [Nazionali - Dataset Ufficiale]": ("UNL", "hybrid-national"),
 }
 
-# Sidebar pulita
 str_lit.sidebar.markdown("### ⚙️ Configurazione")
 api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", type="password")
 str_lit.sidebar.markdown("---")
@@ -129,7 +122,6 @@ else:
     str_lit.sidebar.markdown("Seleziona i tornei:")
     selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["Serie A (Italia) [Club]", "Premier League (Inghilterra) [Club]"]))}
 
-# Tab di Navigazione
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
     "📅 Calendario",
     "🏆 Classifica",
@@ -274,23 +266,69 @@ with tab_calendario:
         lam_t = statistiche_squadre.get(sq_t, {}).get("media_gf", 1.1)
 
         p_c, p_p, p_t = 0.0, 0.0, 0.0
+        prob_under_over = {0.5: 0.0, 1.5: 0.0, 2.5: 0.0, 3.5: 0.0, 4.5: 0.0}
+        prob_btts_yes = 0.0
         matrice_risultati = np.zeros((6, 6))
+
         for rc in range(6):
             for rt in range(6):
                 prob = poisson_prob(lam_c, rc) * poisson_prob(lam_t, rt)
                 matrice_risultati[rc, rt] = prob
+                
+                # Segni 1X2
                 if rc > rt: p_c += prob
                 elif rc == rt: p_p += prob
                 else: p_t += prob
+                
+                # Under / Over
+                tot_gol = rc + rt
+                for soglia in prob_under_over:
+                    if tot_gol <= soglia:
+                        prob_under_over[soglia] += prob
+                        
+                # Goal / No Goal
+                if rc > 0 and rt > 0:
+                    prob_btts_yes += prob
+
         tot = p_c + p_p + p_t
         p_c, p_p, p_t = (p_c/tot)*100, (p_p/tot)*100, (p_t/tot)*100
+        prob_btts_no = 1.0 - prob_btts_yes
 
         str_lit.markdown('<div class="custom-card">', unsafe_allow_html=True)
-        str_lit.markdown(f"<h3>🔬 Analisi Poisson: {sq_c} vs {sq_t}</h3>", unsafe_allow_html=True)
+        str_lit.markdown(f"<h3>🔬 Analisi Avanzata Poisson & Mercati: {sq_c} vs {sq_t}</h3>", unsafe_allow_html=True)
+        
+        # Metriche 1X2
         col1, col2, col3 = str_lit.columns(3)
-        col1.metric("Segno 1 (Casa)", f"{p_c:.1f}%", f"Quota: {100/p_c:.2f}")
-        col2.metric("Segno X (Pareggio)", f"{p_p:.1f}%", f"Quota: {100/p_p:.2f}")
-        col3.metric("Segno 2 (Trasferta)", f"{p_t:.1f}%", f"Quota: {100/p_t:.2f}")
+        col1.metric("Segno 1 (Casa)", f"{p_c:.1f}%", f"Quota equa: {100/p_c:.2f}")
+        col2.metric("Segno X (Pareggio)", f"{p_p:.1f}%", f"Quota equa: {100/p_p:.2f}")
+        col3.metric("Segno 2 (Trasferta)", f"{p_t:.1f}%", f"Quota equa: {100/p_t:.2f}")
+        
+        str_lit.markdown("<br>", unsafe_allow_html=True)
+        str_lit.markdown("#### ⚽ Analisi Under / Over & Goal / No Goal")
+        
+        # Metriche Under/Over e BTTS
+        uo_col1, uo_col2, uo_col3, uo_col4, uo_col5 = str_lit.columns(5)
+        uo_col1.metric("Over 2.5", f"{(1 - prob_under_over[2.5])*100:.1f}%", f"Under: {prob_under_over[2.5]*100:.1f}%")
+        uo_col2.metric("Over 1.5", f"{(1 - prob_under_over[1.5])*100:.1f}%", f"Under: {prob_under_over[1.5]*100:.1f}%")
+        uo_col3.metric("Over 3.5", f"{(1 - prob_under_over[3.5])*100:.1f}%", f"Under: {prob_under_over[3.5]*100:.1f}%")
+        uo_col4.metric("Goal (BTTS)", f"{prob_btts_yes*100:.1f}%", f"Quota: {100/(prob_btts_yes*100):.2f}" if prob_btts_yes > 0 else "N.D.")
+        uo_col5.metric("No Goal", f"{prob_btts_no*100:.1f}%", f"Quota: {100/(prob_btts_no*100):.2f}" if prob_btts_no > 0 else "N.D.")
+
+        str_lit.markdown("<br>", unsafe_allow_html=True)
+        str_lit.markdown("#### 🎯 Top 3 Risultati Esatti più Probabili")
+        
+        # Estrazione Top 3 Risultati Esatti
+        lista_esatti = []
+        for rc in range(6):
+            for rt in range(6):
+                lista_esatti.append(((rc, rt), matrice_risultati[rc, rt]))
+        lista_esatti.sort(key=lambda x: x[1], reverse=True)
+        
+        c_res1, c_res2, c_res3 = str_lit.columns(3)
+        with c_res1: str_lit.info(f"🥇 1° Esatto: **{lista_esatti[0][0][0]} - {lista_esatti[0][0][1]}** ({lista_esatti[0][1]*100:.1f}%)")
+        with c_res2: str_lit.info(f"🥈 2° Esatto: **{lista_esatti[1][0][0]} - {lista_esatti[1][0][1]}** ({lista_esatti[1][1]*100:.1f}%)")
+        with c_res3: str_lit.info(f"🥉 3° Esatto: **{lista_esatti[2][0][0]} - {lista_esatti[2][0][1]}** ({lista_esatti[2][1]*100:.1f}%)")
+        
         str_lit.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 2: CLASSIFICA ---
