@@ -86,43 +86,31 @@ str_lit.markdown(
     unsafe_allow_html=True,
 )
 
-# --- DIZIONARI COMPETIZIONI E COPPE ---
+# --- DIZIONARI COMPETIZIONI (Gratuiti su Football-Data.org) ---
 LEAGUES = {
-    "Serie A (Italia) [Club]": ("SA", "football-data"),
-    "Premier League (Inghilterra) [Club]": ("PL", "football-data"),
-    "La Liga (Spagna) [Club]": ("PD", "football-data"),
-    "Bundesliga (Germania) [Club]": ("BL1", "football-data"),
-    "Ligue 1 (Francia) [Club]": ("FL1", "football-data"),
-    "Eredivisie (Olanda) [Club]": ("DED", "football-data"),
-}
-
-CAMPIONATI_COPPE = {
-    "🌍 UEFA Champions League": {"code": "CL", "gratis_confermato": True},
-    "🌍 UEFA Europa League": {"code": "EL", "gratis_confermato": False},
-    "🌍 UEFA Conference League": {"code": "UECL", "gratis_confermato": False},
-    "🌍 UEFA Nations League": {"code": "UNL", "gratis_confermato": True},
+    "🇮🇹 Serie A (Italia)": ("SA", "football-data"),
+    "🇬🇧 Premier League (Inghilterra)": ("PL", "football-data"),
+    "🇪🇸 La Liga (Spagna)": ("PD", "football-data"),
+    "🇩🇪 Bundesliga (Germania)": ("BL1", "football-data"),
+    "🇫🇷 Ligue 1 (Francia)": ("FL1", "football-data"),
+    "🇳🇱 Eredivisie (Olanda)": ("DED", "football-data"),
+    "🇪🇺 Champions League": ("CL", "football-data"),
+    "🌍 UEFA Nations League": ("UNL", "football-data"), # Codice ufficiale API
 }
 
 str_lit.sidebar.markdown("### ⚙ Configurazione")
 api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value="d29062443f334e339e7b953ed78a1ac3", type="password")
 str_lit.sidebar.markdown("---")
 
-tipo_scelta = str_lit.sidebar.radio("🌐 Seleziona Categoria", ["Campionati Nazionali", "Coppe e Nazionali (API Europee)"])
+modalita_campionati = str_lit.sidebar.radio("🌐 Modalità Selezione", ["Singolo Torneo", "Multi-Torneo (Globale)"])
 
 selezionati_dict = {}
-if tipo_scelta == "Campionati Nazionali":
-    modalita_campionati = str_lit.sidebar.radio("Modalità Campionati", ["Singolo Campionato", "Multi-Campionato (Globale)"])
-    if modalita_campionati == "Singolo Campionato":
-        campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Campionato", list(LEAGUES.keys()))
-        selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
-    else:
-        str_lit.sidebar.markdown("Seleziona i tornei:")
-        selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["Serie A (Italia) [Club]", "Premier League (Inghilterra) [Club]"]))}
+if modalita_campionati == "Singolo Torneo":
+    campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Competizione", list(LEAGUES.keys()))
+    selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
 else:
-    str_lit.sidebar.markdown("Seleziona le Coppe/Nazionali:")
-    for nome_coppa, info_coppa in CAMPIONATI_COPPE.items():
-        if str_lit.sidebar.checkbox(nome_coppa, value=(info_coppa["code"] in ["CL", "UNL"])):
-            selezionati_dict[nome_coppa] = (info_coppa["code"], "api-europee")
+    str_lit.sidebar.markdown("Seleziona i tornei desiderati:")
+    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["🇮🇹 Serie A (Italia)", "🇬🇧 Premier League (Inghilterra)"]))}
 
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
     "📅 Calendario",
@@ -196,10 +184,12 @@ for c_nome, (codice_lega, tipo_fonte) in selezionati_dict.items():
     if api_key:
         dati = scarica_dati_club(api_key, codice_lega)
         dati_classifica = scarica_classifica_club(api_key, codice_lega)
+        
         if dati and "matches" in dati: 
             for m in dati["matches"]:
                 m["Competizione"] = c_nome
                 matches_raw.append(m)
+                
         if dati_classifica and "standings" in dati_classifica:
             for s in dati_classifica["standings"]:
                 for riga in s.get("table", []):
@@ -257,7 +247,7 @@ with tab_calendario:
                 if str_lit.button("📊 Analizza Match", key=f"btn_{idx}"):
                     str_lit.session_state["match_attivo"] = row
     else:
-        str_lit.info("👈 Inserisci la chiave API nella barra laterale o seleziona un campionato/coppa valido.")
+        str_lit.warning("⚠️ Nessuna partita trovata per la competizione selezionata (potrebbe non esserci un turno attivo in questo momento). Seleziona un campionato come Serie A o Premier League per testare subito tutte le funzioni.")
 
     if "match_attivo" in str_lit.session_state:
         m = str_lit.session_state["match_attivo"]
