@@ -173,6 +173,33 @@ def get_dati_nations_league_reali():
 def poisson_prob(lmbda, k):
     return (math.exp(-lmbda) * (lmbda**k)) / math.factorial(k)
 
+def calcola_statistiche_avanzate_match(sq_casa, sq_trasf, statistiche_squadre):
+    dati_c = statistiche_squadre.get(sq_casa, {"media_gf": 1.4, "media_gs": 1.1})
+    dati_t = statistiche_squadre.get(sq_trasf, {"media_gf": 1.1, "media_gs": 1.3})
+    
+    xg_c = round(dati_c["media_gf"] * 0.95 + dati_t["media_gs"] * 0.05, 2)
+    xg_t = round(dati_t["media_gf"] * 0.95 + dati_c["media_gs"] * 0.05, 2)
+    
+    tiri_c = round(xg_c * 9.2 + 1.5, 1)
+    tiri_t = round(xg_t * 9.0 + 1.4, 1)
+    
+    porta_c = round(tiri_c * 0.35, 1)
+    porta_t = round(tiri_t * 0.33, 1)
+    
+    falli_c = round(12.0 + (dati_c["media_gs"] * 0.5), 1)
+    falli_t = round(12.5 + (dati_t["media_gs"] * 0.5), 1)
+    
+    offside_c = round(1.4 + (xg_c * 0.2), 1)
+    offside_t = round(1.3 + (xg_t * 0.2), 1)
+    
+    return {
+        "Gol Attesi (xG)": (xg_c, xg_t),
+        "Tiri Attesi": (tiri_c, tiri_t),
+        "Tiri in Porta Attesi": (porta_c, porta_t),
+        "Falli Attesi": (falli_c, falli_t),
+        "Fuorigioco Attesi": (offside_c, offside_t)
+    }
+
 # --- ACQUISIZIONE DATI ---
 statistiche_squadre = {}
 matches_raw = []
@@ -272,18 +299,15 @@ with tab_calendario:
                 prob = poisson_prob(lam_c, rc) * poisson_prob(lam_t, rt)
                 matrice_risultati[rc, rt] = prob
                 
-                # Segni 1X2
                 if rc > rt: p_c += prob
                 elif rc == rt: p_p += prob
                 else: p_t += prob
                 
-                # Under / Over
                 tot_gol = rc + rt
                 for soglia in prob_under_over:
                     if tot_gol <= soglia:
                         prob_under_over[soglia] += prob
                         
-                # Goal / No Goal
                 if rc > 0 and rt > 0:
                     prob_btts_yes += prob
 
@@ -291,10 +315,52 @@ with tab_calendario:
         p_c, p_p, p_t = (p_c/tot)*100, (p_p/tot)*100, (p_t/tot)*100
         prob_btts_no = 1.0 - prob_btts_yes
 
-        str_lit.markdown('<div class="custom-card">', unsafe_allow_html=True)
+        # SCHEDA DINAMICA DELLA PARTITA CON STATISTICHE CALCOLATE
+        stats_match = calcola_statistiche_avanzate_match(sq_c, sq_t, statistiche_squadre)
+
+        str_lit.markdown(
+            f"""
+            <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); border: 1px solid #312e81; border-radius: 20px; padding: 25px; margin-top: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 15px; margin-bottom: 20px;">
+                    <span style="font-weight: 800; font-size: 1.2rem; color: #f8fafc;">📋 SCHEDA DINAMICA DELLA PARTITA</span>
+                    <span style="color: #94a3b8; font-size: 0.95rem;">📅 {m.get('data', 'N/D')} - {m.get('ora', '')}</span>
+                </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        col_sq, col_st = str_lit.columns([1.2, 1.8])
+        with col_sq:
+            str_lit.markdown(
+                f"""
+                <div style="text-align: center; padding: 30px 20px; background: rgba(15, 23, 42, 0.6); border-radius: 14px; border: 1px solid #1e293b;">
+                    <h2 style="color: #38bdf8; margin: 0; font-size: 1.4rem;">{sq_c}</h2>
+                    <p style="color: #64748b; margin: 5px 0 20px 0; font-size: 0.85rem;">CASA</p>
+                    <h3 style="color: #a855f7; margin: 0; font-size: 1.2rem;">VS</h3>
+                    <h2 style="color: #f43f5e; margin: 20px 0 0 0; font-size: 1.4rem;">{sq_t}</h2>
+                    <p style="color: #64748b; margin: 5px 0 0 0; font-size: 0.85rem;">TRASFERTA</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+        with col_st:
+            str_lit.markdown("<p style='text-align: center; font-weight: 700; color: #94a3b8; margin-bottom: 15px; letter-spacing: 0.5px;'>STATISTICHE PREVISTE (LIVE CALC)</p>", unsafe_allow_html=True)
+            for label, (val_c, val_t) in stats_match.items():
+                str_lit.markdown(
+                    f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #111827; padding: 12px 18px; border-radius: 10px; border: 1px solid #1f2937; margin-bottom: 10px;">
+                        <span style="font-weight: 700; color: #38bdf8; font-size: 1.1rem; width: 60px; text-align: left;">{val_c}</span>
+                        <span style="color: #94a3b8; font-size: 0.9rem; font-weight: 600; text-align: center; flex-grow: 1;">{label}</span>
+                        <span style="font-weight: 700; color: #f43f5e; font-size: 1.1rem; width: 60px; text-align: right;">{val_t}</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        str_lit.markdown("<br>", unsafe_allow_html=True)
         str_lit.markdown(f"<h3>🔬 Analisi Avanzata Poisson & Mercati: {sq_c} vs {sq_t}</h3>", unsafe_allow_html=True)
         
-        # Metriche 1X2
         col1, col2, col3 = str_lit.columns(3)
         col1.metric("Segno 1 (Casa)", f"{p_c:.1f}%", f"Quota equa: {100/p_c:.2f}")
         col2.metric("Segno X (Pareggio)", f"{p_p:.1f}%", f"Quota equa: {100/p_p:.2f}")
@@ -303,7 +369,6 @@ with tab_calendario:
         str_lit.markdown("<br>", unsafe_allow_html=True)
         str_lit.markdown("#### ⚽ Analisi Under / Over & Goal / No Goal")
         
-        # Metriche Under/Over e BTTS
         uo_col1, uo_col2, uo_col3, uo_col4, uo_col5 = str_lit.columns(5)
         uo_col1.metric("Over 2.5", f"{(1 - prob_under_over[2.5])*100:.1f}%", f"Under: {prob_under_over[2.5]*100:.1f}%")
         uo_col2.metric("Over 1.5", f"{(1 - prob_under_over[1.5])*100:.1f}%", f"Under: {prob_under_over[1.5]*100:.1f}%")
@@ -314,7 +379,6 @@ with tab_calendario:
         str_lit.markdown("<br>", unsafe_allow_html=True)
         str_lit.markdown("#### 🎯 Top 3 Risultati Esatti più Probabili")
         
-        # Estrazione Top 3 Risultati Esatti
         lista_esatti = []
         for rc in range(6):
             for rt in range(6):
@@ -453,7 +517,7 @@ with tab_value_finder:
     else:
         str_lit.info("Nessun incontro disponibile.")
 
-# --- TAB 7: MONTE CARLO AGGIORNATO (Tutti i risultati e mercati completi) ---
+# --- TAB 7: MONTE CARLO AGGIORNATO ---
 with tab_monte_carlo:
     str_lit.subheader("🎲 Simulatore Monte Carlo Avanzato")
     if statistiche_squadre:
@@ -467,16 +531,13 @@ with tab_monte_carlo:
             lc = statistiche_squadre[sq_c]["media_gf"] * 1.05
             lt = statistiche_squadre[sq_t]["media_gf"] * 0.95
             
-            # Generazione simulazioni con Poisson
             gc_sim = np.random.poisson(lc, iterazioni)
             gt_sim = np.random.poisson(lt, iterazioni)
             
-            # Calcolo metriche 1X2
             v_c = np.sum(gc_sim > gt_sim) / (iterazioni / 100)
             v_p = np.sum(gc_sim == gt_sim) / (iterazioni / 100)
             v_t = np.sum(gc_sim < gt_sim) / (iterazioni / 100)
             
-            # Calcolo mercati Under/Over e BTTS
             tot_gol = gc_sim + gt_sim
             p_over15 = np.sum(tot_gol > 1.5) / (iterazioni / 100)
             p_over25 = np.sum(tot_gol > 2.5) / (iterazioni / 100)
@@ -498,7 +559,6 @@ with tab_monte_carlo:
             str_lit.markdown("<br>", unsafe_allow_html=True)
             str_lit.markdown("#### 🎯 Top 3 Risultati Esatti più Frequenti")
             
-            # Estrazione dei 3 risultati esatti con maggiore frequenza nella simulazione
             risultati_coppie = list(zip(gc_sim, gt_sim))
             conteggio_esatti = pd.Series(risultati_coppie).value_counts().head(3)
             
@@ -511,7 +571,6 @@ with tab_monte_carlo:
                     medaglia = ["🥇", "🥈", "🥉"][idx]
                     str_lit.info(f"{medaglia} **{rc} - {rt}** ({perc:.1f}% delle volte)")
             
-            # Grafico della distribuzione dei gol totali
             str_lit.markdown("<br>", unsafe_allow_html=True)
             df_dist = pd.DataFrame({"Gol Totali": tot_gol})
             fig_mc = px.histogram(df_dist, x="Gol Totali", nbins=int(max(tot_gol))+1, title="Distribuzione Frequenza Gol Totali (Iterazioni Monte Carlo)", template="plotly_dark")
