@@ -1,12 +1,10 @@
-
-iimport math
+import math
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import streamlit as str_lit
-
 
 # ============================================================
 # CONFIGURAZIONE PAGINA
@@ -17,7 +15,6 @@ str_lit.set_page_config(
     layout="wide",
     page_icon="⚽",
 )
-
 
 # ============================================================
 # DESIGN MODERNO AVANZATO
@@ -32,17 +29,9 @@ str_lit.markdown(
         font-family: 'Inter', sans-serif;
     }
 
-    #MainMenu {
-        visibility: hidden;
-    }
-
-    footer {
-        visibility: hidden;
-    }
-
-    header {
-        visibility: hidden;
-    }
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
 
     .stApp {
         background-color: #0b0f19;
@@ -94,7 +83,6 @@ str_lit.markdown(
     unsafe_allow_html=True,
 )
 
-
 # ============================================================
 # HEADER PRINCIPALE
 # ============================================================
@@ -132,7 +120,6 @@ str_lit.markdown(
     unsafe_allow_html=True,
 )
 
-
 # ============================================================
 # DIZIONARIO COMPETIZIONI
 # ============================================================
@@ -153,21 +140,22 @@ LEAGUES = {
         "categoria": "Serie B"
     },
 
-    # SERIE C - TRE GIRONI SEPARATI
-
     "🇮🇹 Serie C - Girone A [Open Data]": {
         "type": "custom_league",
-        "categoria": "Serie C - Girone A"
+        "categoria": "Serie C",
+        "girone": "A"
     },
 
     "🇮🇹 Serie C - Girone B [Open Data]": {
         "type": "custom_league",
-        "categoria": "Serie C - Girone B"
+        "categoria": "Serie C",
+        "girone": "B"
     },
 
     "🇮🇹 Serie C - Girone C [Open Data]": {
         "type": "custom_league",
-        "categoria": "Serie C - Girone C"
+        "categoria": "Serie C",
+        "girone": "C"
     },
 
     # --------------------------------------------------------
@@ -205,7 +193,6 @@ LEAGUES = {
     },
 }
 
-
 # ============================================================
 # SIDEBAR
 # ============================================================
@@ -218,12 +205,7 @@ api_key = str_lit.sidebar.text_input(
     type="password"
 )
 
-str_lit.sidebar.caption(
-    "La chiave API non è inclusa nel codice pubblicato su GitHub."
-)
-
 str_lit.sidebar.markdown("---")
-
 
 modalita_campionati = str_lit.sidebar.radio(
     "🌐 Modalità Campionati",
@@ -233,9 +215,7 @@ modalita_campionati = str_lit.sidebar.radio(
     ]
 )
 
-
 selezionati_dict = {}
-
 
 if modalita_campionati == "Singolo Campionato":
 
@@ -268,21 +248,12 @@ else:
         )
     }
 
-
 # ============================================================
 # TABS
 # ============================================================
 
-(
-    tab_calendario,
-    tab_classifica,
-    tab_value,
-    tab_grafici,
-    tab_ai_schedine,
-    tab_value_finder,
-    tab_monte_carlo,
-    tab_audit
-) = str_lit.tabs(
+tab_calendario, tab_classifica, tab_value, tab_grafici, \
+tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs(
     [
         "📅 Calendario",
         "🏆 Classifica",
@@ -295,9 +266,8 @@ else:
     ]
 )
 
-
 # ============================================================
-# FUNZIONI API FOOTBALL-DATA.ORG
+# API FOOTBALL-DATA.ORG
 # ============================================================
 
 @str_lit.cache_data(ttl=3600)
@@ -365,14 +335,170 @@ def scarica_classifica_api(chiave, league_code):
 
 
 # ============================================================
-# GENERATORE CALENDARIO ITALIANO
+# SERIE C 2026/27
+# 3 GIRONI DA 20 SQUADRE
+# 38 GIORNATE
+# 10 PARTITE PER GIORNATA
 # ============================================================
 
-def genera_calendario_italiano(categoria):
+SERIE_C_GIRONI = {
 
-    # ========================================================
+    "A": [
+        "AlbinoLeffe",
+        "Alcione Milano",
+        "Arzignano Valchiampo",
+        "Carpi",
+        "Cittadella",
+        "Desenzano",
+        "Dolomiti Bellunesi",
+        "Folgore Caratese",
+        "Giana Erminio",
+        "Juventus Next Gen",
+        "Lecco",
+        "Lumezzane",
+        "Novara",
+        "Ospitaletto Franciacorta",
+        "Pergolettese",
+        "Pro Vercelli",
+        "Renate",
+        "Trento",
+        "Treviso",
+        "Union Brescia",
+    ],
+
+    "B": [
+        "Atalanta U23",
+        "Campobasso",
+        "Forlì",
+        "Grosseto",
+        "Gubbio",
+        "Guidonia Montecelio",
+        "Latina",
+        "Livorno",
+        "Ostiamare",
+        "Perugia",
+        "Pescara",
+        "Pianese",
+        "Pineto",
+        "Ravenna",
+        "Reggiana",
+        "Sambenedettese",
+        "Spezia",
+        "Torres",
+        "Vado",
+        "Vis Pesaro",
+    ],
+
+    "C": [
+        "Altamura",
+        "Audace Cerignola",
+        "Bari",
+        "Barletta",
+        "Casarano",
+        "Casertana",
+        "Catania",
+        "Cavese",
+        "Cosenza",
+        "Crotone",
+        "Foggia",
+        "Giugliano",
+        "Inter U23",
+        "Monopoli",
+        "Picerno",
+        "Potenza",
+        "Salernitana",
+        "Savoia",
+        "Scafatese",
+        "Sorrento",
+    ],
+}
+
+
+# ============================================================
+# GENERATORE ROUND ROBIN
+# ============================================================
+
+def genera_round_robin(squadre):
+
+    if len(squadre) != 20:
+        raise ValueError(
+            "Un girone di Serie C deve contenere esattamente 20 squadre."
+        )
+
+    squadre = list(squadre)
+
+    n = len(squadre)
+
+    prima_fase = []
+
+    # --------------------------------------------------------
+    # ANDATA
+    # --------------------------------------------------------
+
+    rotazione = squadre.copy()
+
+    for giornata in range(1, n):
+
+        partite_giornata = []
+
+        for i in range(n // 2):
+
+            casa = rotazione[i]
+            trasferta = rotazione[n - 1 - i]
+
+            # Alternanza casa/trasferta
+            # per evitare una distribuzione troppo sbilanciata
+            if giornata % 2 == 0:
+                casa, trasferta = trasferta, casa
+
+            partite_giornata.append(
+                (casa, trasferta)
+            )
+
+        prima_fase.append(partite_giornata)
+
+        # Rotazione "circle method"
+        rotazione = [
+            rotazione[0]
+        ] + [
+            rotazione[-1]
+        ] + [
+            *rotazione[1:-1]
+        ]
+
+    # --------------------------------------------------------
+    # RITORNO
+    # --------------------------------------------------------
+
+    seconda_fase = []
+
+    for giornata in prima_fase:
+
+        ritorno = []
+
+        for casa, trasferta in giornata:
+
+            ritorno.append(
+                (trasferta, casa)
+            )
+
+        seconda_fase.append(ritorno)
+
+    return prima_fase + seconda_fase
+
+
+# ============================================================
+# GENERATORE SERIE B / SERIE C
+# ============================================================
+
+def genera_calendario_italiano(
+    categoria,
+    girone=None
+):
+
+    # --------------------------------------------------------
     # SERIE B
-    # ========================================================
+    # --------------------------------------------------------
 
     if categoria == "Serie B":
 
@@ -396,449 +522,138 @@ def genera_calendario_italiano(categoria):
             "Juve Stabia",
             "Carrarese",
             "Cosenza",
-            "Pisa"
+            "Pisa",
         ]
 
-        # Manteniamo la logica originale della Serie B.
-        matches = []
+        nome_girone = ""
 
-        rng = np.random.default_rng(42)
+    # --------------------------------------------------------
+    # SERIE C
+    # --------------------------------------------------------
 
-        n = len(squadre)
+    elif categoria == "Serie C":
 
-        giornate_totali = (n - 1) * 2
+        if girone not in SERIE_C_GIRONI:
+            raise ValueError(
+                f"Girone Serie C non valido: {girone}"
+            )
 
-        for g in range(
-            1,
-            min(10, giornate_totali + 1)
-        ):
+        squadre = SERIE_C_GIRONI[girone]
 
-            sq_turno = squadre.copy()
-
-            rng.shuffle(sq_turno)
-
-            for i in range(0, n, 2):
-
-                h = sq_turno[i]
-                a = sq_turno[i + 1]
-
-                if g <= 5:
-
-                    g_c = int(
-                        rng.choice(
-                            [0, 1, 2, 3],
-                            p=[
-                                0.25,
-                                0.40,
-                                0.25,
-                                0.10
-                            ]
-                        )
-                    )
-
-                    g_t = int(
-                        rng.choice(
-                            [0, 1, 2],
-                            p=[
-                                0.35,
-                                0.45,
-                                0.20
-                            ]
-                        )
-                    )
-
-                else:
-
-                    g_c = None
-                    g_t = None
-
-                matches.append(
-                    {
-                        "Competizione":
-                            "🇮🇹 Serie B (Italia) [Open Data]",
-
-                        "matchday": g,
-
-                        "homeTeam": {
-                            "name": h
-                        },
-
-                        "awayTeam": {
-                            "name": a
-                        },
-
-                        "utcDate":
-                            f"2026-04-{10 + g:02d}",
-
-                        "score": {
-                            "fullTime": {
-                                "home": g_c,
-                                "away": g_t
-                            }
-                        },
-
-                        "status":
-                            "FINISHED"
-                            if g_c is not None
-                            else "TIMED"
-                    }
-                )
-
-        return matches
-
-
-    # ========================================================
-    # SERIE C - GIRONE A
-    # ========================================================
-
-    elif categoria == "Serie C - Girone A":
-
-        squadre = [
-            "Albinoleffe",
-            "Alcione Milano",
-            "Arzignano",
-            "Carpi",
-            "Cittadella",
-            "Desenzano",
-            "Dolomiti Bellunesi",
-            "Folgore Caratese",
-            "Giana Erminio",
-            "Juventus Next Gen",
-            "Lecco",
-            "Lumezzane",
-            "Novara",
-            "Ospitaletto Franciacorta",
-            "Pergolettese",
-            "Pro Vercelli",
-            "Renate",
-            "Trento",
-            "Treviso",
-            "Union Brescia"
-        ]
-
-
-    # ========================================================
-    # SERIE C - GIRONE B
-    # ========================================================
-
-    elif categoria == "Serie C - Girone B":
-
-        squadre = [
-            "Atalanta Under 23",
-            "Campobasso",
-            "Forlì",
-            "Grosseto",
-            "Gubbio",
-            "Guidonia Montecelio",
-            "Latina",
-            "Livorno",
-            "Ostiamare",
-            "Perugia",
-            "Pescara",
-            "Pianese",
-            "Pineto",
-            "Ravenna",
-            "Reggiana",
-            "Sambenedettese",
-            "Spezia",
-            "Torres",
-            "Vado",
-            "Vis Pesaro"
-        ]
-
-
-    # ========================================================
-    # SERIE C - GIRONE C
-    # ========================================================
-
-    elif categoria == "Serie C - Girone C":
-
-        squadre = [
-            "Altamura",
-            "Audace Cerignola",
-            "Bari",
-            "Barletta",
-            "Casarano",
-            "Casertana",
-            "Catania",
-            "Cavese",
-            "Cosenza",
-            "Crotone",
-            "Foggia",
-            "Giugliano",
-            "Inter U23",
-            "Monopoli",
-            "Picerno",
-            "Potenza",
-            "Salernitana",
-            "Savoia",
-            "Scafatese",
-            "Sorrento"
-        ]
-
+        nome_girone = f" - Girone {girone}"
 
     else:
 
-        return []
+        raise ValueError(
+            f"Categoria non supportata: {categoria}"
+        )
 
+    # --------------------------------------------------------
+    # CALENDARIO
+    # --------------------------------------------------------
 
-    # ========================================================
-    # CONTROLLO NUMERO SQUADRE
-    # ========================================================
+    calendario = genera_round_robin(squadre)
 
-    if len(squadre) != 20:
+    matches = []
 
-        return []
-
-
-    # ========================================================
-    # ROUND ROBIN
-    #
-    # 20 squadre
-    # 19 giornate andata
-    # 19 giornate ritorno
-    # = 38 giornate
-    #
-    # 10 partite per giornata
-    # = 380 partite totali
-    # ========================================================
-
-    def genera_andata(lista_squadre):
-
-        teams = list(lista_squadre)
-
-        n = len(teams)
-
-        calendario = []
-
-        # Una squadra rimane fissa.
-        squadra_fissa = teams[0]
-
-        rotazione = teams[1:]
-
-        for giornata in range(1, n):
-
-            turno = [
-                squadra_fissa
-            ] + rotazione
-
-            partite = []
-
-            for i in range(n // 2):
-
-                casa = turno[i]
-
-                trasferta = turno[
-                    n - 1 - i
-                ]
-
-                # Alternanza casa/trasferta
-                # per distribuire meglio i fattori campo.
-
-                if giornata % 2 == 0:
-
-                    casa, trasferta = (
-                        trasferta,
-                        casa
-                    )
-
-                partite.append(
-                    (
-                        casa,
-                        trasferta
-                    )
-                )
-
-            calendario.append(partite)
-
-            # Rotazione circolare.
-            rotazione = (
-                [rotazione[-1]]
-                + rotazione[:-1]
-            )
-
-        return calendario
-
-
-    calendario_andata = genera_andata(
-        squadre
+    # RNG separato e deterministico
+    # solo per i risultati simulati
+    seed = 100 + (
+        ord(girone)
+        if girone
+        else 50
     )
 
+    rng = np.random.default_rng(seed)
 
-    # ========================================================
-    # COSTRUZIONE CALENDARIO COMPLETO
-    # ========================================================
-
-    calendario_completo = []
-
-    # --------------------------------------------------------
-    # ANDATA
-    # --------------------------------------------------------
-
-    for indice_giornata, partite in enumerate(
-        calendario_andata,
+    for numero_giornata, partite in enumerate(
+        calendario,
         start=1
     ):
 
         for casa, trasferta in partite:
 
-            calendario_completo.append(
-                {
-                    "giornata": indice_giornata,
-                    "casa": casa,
-                    "trasferta": trasferta
-                }
-            )
+            # ------------------------------------------------
+            # RISULTATI SIMULATI
+            # Manteniamo la logica della vecchia app:
+            # prime 5 giornate con risultato,
+            # successive ancora da giocare.
+            # ------------------------------------------------
 
+            if numero_giornata <= 5:
 
-    # --------------------------------------------------------
-    # RITORNO
-    #
-    # Giornate 20-38.
-    # Tutte le partite vengono invertite.
-    # --------------------------------------------------------
-
-    for indice_giornata, partite in enumerate(
-        calendario_andata,
-        start=20
-    ):
-
-        for casa, trasferta in partite:
-
-            calendario_completo.append(
-                {
-                    "giornata": indice_giornata,
-                    "casa": trasferta,
-                    "trasferta": casa
-                }
-            )
-
-
-    # ========================================================
-    # GENERAZIONE OUTPUT MATCH
-    # ========================================================
-
-    matches = []
-
-    # Seed diverso per ciascun girone.
-    seed_girone = {
-        "Serie C - Girone A": 100,
-        "Serie C - Girone B": 200,
-        "Serie C - Girone C": 300
-    }
-
-    rng = np.random.default_rng(
-        seed_girone.get(
-            categoria,
-            999
-        )
-    )
-
-
-    for partita in calendario_completo:
-
-        giornata = partita["giornata"]
-
-        casa = partita["casa"]
-
-        trasferta = partita["trasferta"]
-
-
-        # ----------------------------------------------------
-        # RISULTATI SIMULATI
-        #
-        # Solo per mantenere funzionante l'attuale modello.
-        # Prime 8 giornate = risultati disponibili.
-        # Dalla 9 in poi = partite future.
-        # ----------------------------------------------------
-
-        if giornata <= 8:
-
-            gol_casa = int(
-                rng.choice(
-                    [0, 1, 2, 3, 4],
-                    p=[
-                        0.24,
-                        0.40,
-                        0.25,
-                        0.09,
-                        0.02
-                    ]
+                gol_casa = int(
+                    rng.choice(
+                        [0, 1, 2, 3],
+                        p=[
+                            0.25,
+                            0.40,
+                            0.25,
+                            0.10
+                        ]
+                    )
                 )
-            )
 
-            gol_trasferta = int(
-                rng.choice(
-                    [0, 1, 2, 3, 4],
-                    p=[
-                        0.30,
-                        0.40,
-                        0.20,
-                        0.08,
-                        0.02
-                    ]
+                gol_trasferta = int(
+                    rng.choice(
+                        [0, 1, 2],
+                        p=[
+                            0.35,
+                            0.45,
+                            0.20
+                        ]
+                    )
                 )
+
+                stato = "FINISHED"
+
+            else:
+
+                gol_casa = None
+                gol_trasferta = None
+
+                stato = "TIMED"
+
+            # ------------------------------------------------
+            # DATA TECNICA
+            # Non inventiamo date ufficiali.
+            # Usiamo l'indicazione della giornata.
+            # ------------------------------------------------
+
+            data_visualizzata = (
+                f"2026/27 - Giornata {numero_giornata}"
             )
 
-            status = "FINISHED"
-
-        else:
-
-            gol_casa = None
-
-            gol_trasferta = None
-
-            status = "TIMED"
-
-
-        # ----------------------------------------------------
-        # DATA TECNICA GENERATA
-        #
-        # NON è il calendario ufficiale.
-        # Serve solamente alla visualizzazione.
-        # ----------------------------------------------------
-
-        data_partita = (
-            pd.Timestamp("2026-08-21")
-            + pd.Timedelta(
-                days=(giornata - 1) * 7
-            )
-        )
-
-
-        matches.append(
-            {
-                "Competizione":
-                    f"🇮🇹 {categoria} [Open Data]",
-
-                "matchday":
-                    giornata,
-
-                "homeTeam": {
-                    "name": casa
-                },
-
-                "awayTeam": {
-                    "name": trasferta
-                },
-
-                "utcDate":
-                    data_partita.strftime(
-                        "%Y-%m-%dT20:00:00Z"
+            matches.append(
+                {
+                    "Competizione": (
+                        f"🇮🇹 {categoria}"
+                        f"{nome_girone}"
+                        " (Italia) [Open Data]"
                     ),
 
-                "score": {
-                    "fullTime": {
-                        "home": gol_casa,
-                        "away": gol_trasferta
-                    }
-                },
+                    "matchday": numero_giornata,
 
-                "status":
-                    status
-            }
-        )
+                    "homeTeam": {
+                        "name": casa
+                    },
 
+                    "awayTeam": {
+                        "name": trasferta
+                    },
+
+                    "utcDate": data_visualizzata,
+
+                    "score": {
+                        "fullTime": {
+                            "home": gol_casa,
+                            "away": gol_trasferta
+                        }
+                    },
+
+                    "status": stato
+                }
+            )
 
     return matches
 
@@ -847,7 +662,10 @@ def genera_calendario_italiano(categoria):
 # POISSON
 # ============================================================
 
-def poisson_prob(lmbda, k):
+def poisson_prob(
+    lmbda,
+    k
+):
 
     return (
         math.exp(-lmbda)
@@ -881,7 +699,6 @@ def calcola_statistiche_avanzate_match(
         }
     )
 
-
     xg_c = round(
         dati_c["media_gf"] * 0.95
         + dati_t["media_gs"] * 0.05,
@@ -894,7 +711,6 @@ def calcola_statistiche_avanzate_match(
         2
     )
 
-
     tiri_c = round(
         xg_c * 9.2 + 1.5,
         1
@@ -904,7 +720,6 @@ def calcola_statistiche_avanzate_match(
         xg_t * 9.0 + 1.4,
         1
     )
-
 
     porta_c = round(
         tiri_c * 0.35,
@@ -916,30 +731,25 @@ def calcola_statistiche_avanzate_match(
         1
     )
 
-
     falli_c = round(
-        12.0
-        + (dati_c["media_gs"] * 0.5),
+        12.0 + dati_c["media_gs"] * 0.5,
         1
     )
 
     falli_t = round(
-        12.5
-        + (dati_t["media_gs"] * 0.5),
+        12.5 + dati_t["media_gs"] * 0.5,
         1
     )
 
-
     offside_c = round(
-        1.4 + (xg_c * 0.2),
+        1.4 + xg_c * 0.2,
         1
     )
 
     offside_t = round(
-        1.3 + (xg_t * 0.2),
+        1.3 + xg_t * 0.2,
         1
     )
-
 
     return {
 
@@ -975,14 +785,15 @@ def calcola_statistiche_avanzate_match(
 # ============================================================
 
 statistiche_squadre = {}
-
 matches_raw = []
 
+# RNG stabile per le statistiche Open Data
+rng_stats = np.random.default_rng(2026)
 
 for c_nome, info in selezionati_dict.items():
 
     # ========================================================
-    # COMPETIZIONI API
+    # CAMPIONATI API
     # ========================================================
 
     if info["type"] == "api":
@@ -994,13 +805,10 @@ for c_nome, info in selezionati_dict.items():
                 info["code"]
             )
 
-            dati_classifica = (
-                scarica_classifica_api(
-                    api_key,
-                    info["code"]
-                )
+            dati_classifica = scarica_classifica_api(
+                api_key,
+                info["code"]
             )
-
 
             if dati and "matches" in dati:
 
@@ -1009,7 +817,6 @@ for c_nome, info in selezionati_dict.items():
                     m["Competizione"] = c_nome
 
                     matches_raw.append(m)
-
 
             if (
                 dati_classifica
@@ -1023,15 +830,14 @@ for c_nome, info in selezionati_dict.items():
                         []
                     ):
 
-                        nome_sq = (
-                            riga["team"]["name"]
-                        )
+                        nome_sq = riga[
+                            "team"
+                        ]["name"]
 
                         giocate = max(
                             riga["playedGames"],
                             1
                         )
-
 
                         statistiche_squadre[
                             nome_sq
@@ -1055,19 +861,16 @@ for c_nome, info in selezionati_dict.items():
                                 c_nome
                         }
 
-
     # ========================================================
-    # COMPETIZIONI CUSTOM
+    # CAMPIONATI CUSTOM
     # ========================================================
 
     elif info["type"] == "custom_league":
 
-        partite_cat = (
-            genera_calendario_italiano(
-                info["categoria"]
-            )
+        partite_cat = genera_calendario_italiano(
+            info["categoria"],
+            info.get("girone")
         )
-
 
         for m in partite_cat:
 
@@ -1075,11 +878,8 @@ for c_nome, info in selezionati_dict.items():
 
             matches_raw.append(m)
 
-
             h = m["homeTeam"]["name"]
-
             a = m["awayTeam"]["name"]
-
 
             for sq in [h, a]:
 
@@ -1087,42 +887,38 @@ for c_nome, info in selezionati_dict.items():
 
                     statistiche_squadre[sq] = {
 
-                        "media_gf":
-                            round(
-                                np.random.uniform(
-                                    1.0,
-                                    1.8
-                                ),
-                                2
+                        "media_gf": round(
+                            rng_stats.uniform(
+                                1.0,
+                                1.8
                             ),
+                            2
+                        ),
 
-                        "media_gs":
-                            round(
-                                np.random.uniform(
-                                    0.9,
-                                    1.5
-                                ),
-                                2
+                        "media_gs": round(
+                            rng_stats.uniform(
+                                0.9,
+                                1.5
                             ),
+                            2
+                        ),
 
-                        "punti":
-                            int(
-                                np.random.randint(
-                                    10,
-                                    45
-                                )
-                            ),
+                        "punti": int(
+                            rng_stats.integers(
+                                10,
+                                45
+                            )
+                        ),
 
-                        "forma":
-                            "N/D",
+                        "forma": "N/D",
 
-                        "Competizione":
-                            c_nome
+                        "Competizione": c_nome
                     }
 
 
 # ============================================================
-# TAB 1 — CALENDARIO
+# TAB 1
+# CALENDARIO
 # ============================================================
 
 with tab_calendario:
@@ -1131,31 +927,27 @@ with tab_calendario:
 
         lista = []
 
-
         for m in matches_raw:
+
+            g_c = None
+            g_t = None
 
             if (
                 m.get("score")
                 and m["score"].get("fullTime")
             ):
 
-                g_c = (
-                    m["score"]["fullTime"].get(
-                        "home"
-                    )
+                g_c = m[
+                    "score"
+                ]["fullTime"].get(
+                    "home"
                 )
 
-                g_t = (
-                    m["score"]["fullTime"].get(
-                        "away"
-                    )
+                g_t = m[
+                    "score"
+                ]["fullTime"].get(
+                    "away"
                 )
-
-            else:
-
-                g_c = None
-                g_t = None
-
 
             lista.append(
                 {
@@ -1200,37 +992,30 @@ with tab_calendario:
                         m.get(
                             "status",
                             "N/D"
-                        )
+                        ),
                 }
             )
 
-
         df = pd.DataFrame(lista)
 
-
         c_f1, c_f2 = str_lit.columns(2)
-
 
         competizioni_disponibili = sorted(
             df["Competizione"].unique()
         )
-
 
         comp_sel = c_f1.selectbox(
             "🏆 Torneo",
             competizioni_disponibili
         )
 
-
         df_comp = df[
             df["Competizione"] == comp_sel
         ]
 
-
         giornate = sorted(
             df_comp["giornata"].unique()
         )
-
 
         if giornate:
 
@@ -1239,22 +1024,15 @@ with tab_calendario:
                 giornate
             )
 
-
             df_giornata = df_comp[
                 df_comp["giornata"]
                 == giornata_sel
             ]
 
-
-            # Indicatore diagnostico Serie C
-            if "Serie C" in comp_sel:
-
-                str_lit.info(
-                    f"ℹ️ {comp_sel} — "
-                    f"Giornata {giornata_sel}: "
-                    f"**{len(df_giornata)} partite**"
-                )
-
+            str_lit.caption(
+                f"📊 {len(df_giornata)} partite "
+                f"nella giornata selezionata"
+            )
 
             for idx, row in df_giornata.iterrows():
 
@@ -1331,7 +1109,6 @@ with tab_calendario:
                     unsafe_allow_html=True
                 )
 
-
                 if str_lit.button(
                     "📊 Analizza Match",
                     key=f"btn_{idx}"
@@ -1341,18 +1118,16 @@ with tab_calendario:
                         "match_attivo"
                     ] = row
 
-
     else:
 
         str_lit.info(
             "👈 Inserisci la chiave API "
-            "nella barra laterale o seleziona "
-            "un campionato valido."
+            "nella barra laterale oppure "
+            "seleziona un campionato Open Data."
         )
 
-
     # ========================================================
-    # ANALISI MATCH ATTIVO
+    # ANALISI MATCH
     # ========================================================
 
     if "match_attivo" in str_lit.session_state:
@@ -1361,36 +1136,28 @@ with tab_calendario:
             "match_attivo"
         ]
 
-
         sq_c = m["casa"]
-
         sq_t = m["trasferta"]
 
-
-        lam_c = (
-            statistiche_squadre
-            .get(sq_c, {})
-            .get(
-                "media_gf",
-                1.4
-            )
+        lam_c = statistiche_squadre.get(
+            sq_c,
+            {}
+        ).get(
+            "media_gf",
+            1.4
         )
 
-
-        lam_t = (
-            statistiche_squadre
-            .get(sq_t, {})
-            .get(
-                "media_gf",
-                1.1
-            )
+        lam_t = statistiche_squadre.get(
+            sq_t,
+            {}
+        ).get(
+            "media_gf",
+            1.1
         )
-
 
         p_c = 0.0
         p_p = 0.0
         p_t = 0.0
-
 
         prob_under_over = {
             0.5: 0.0,
@@ -1400,14 +1167,11 @@ with tab_calendario:
             4.5: 0.0
         }
 
-
         prob_btts_yes = 0.0
-
 
         matrice_risultati = np.zeros(
             (6, 6)
         )
-
 
         for rc in range(6):
 
@@ -1425,28 +1189,21 @@ with tab_calendario:
                     )
                 )
 
-
                 matrice_risultati[
                     rc,
                     rt
                 ] = prob
 
-
                 if rc > rt:
-
                     p_c += prob
 
                 elif rc == rt:
-
                     p_p += prob
 
                 else:
-
                     p_t += prob
 
-
                 tot_gol = rc + rt
-
 
                 for soglia in prob_under_over:
 
@@ -1456,18 +1213,15 @@ with tab_calendario:
                             soglia
                         ] += prob
 
-
                 if rc > 0 and rt > 0:
 
                     prob_btts_yes += prob
-
 
         tot = (
             p_c
             + p_p
             + p_t
         )
-
 
         if tot > 0:
 
@@ -1483,12 +1237,10 @@ with tab_calendario:
                 p_t / tot
             ) * 100
 
-
         prob_btts_no = (
             1.0
             - prob_btts_yes
         )
-
 
         stats_match = (
             calcola_statistiche_avanzate_match(
@@ -1497,7 +1249,6 @@ with tab_calendario:
                 statistiche_squadre
             )
         )
-
 
         str_lit.markdown(
             f"""
@@ -1520,7 +1271,8 @@ with tab_calendario:
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    border-bottom: 1px solid #1e293b;
+                    border-bottom:
+                        1px solid #1e293b;
                     padding-bottom: 15px;
                     margin-bottom: 20px;
                 ">
@@ -1530,7 +1282,8 @@ with tab_calendario:
                         font-size: 1.2rem;
                         color: #f8fafc;
                     ">
-                        📋 SCHEDA DINAMICA DELLA PARTITA
+                        📋 SCHEDA DINAMICA
+                        DELLA PARTITA
                     </span>
 
                     <span style="
@@ -1545,11 +1298,9 @@ with tab_calendario:
             unsafe_allow_html=True
         )
 
-
         col_sq, col_st = str_lit.columns(
             [1.2, 1.8]
         )
-
 
         with col_sq:
 
@@ -1609,7 +1360,6 @@ with tab_calendario:
                 unsafe_allow_html=True
             )
 
-
         with col_st:
 
             str_lit.markdown(
@@ -1621,12 +1371,12 @@ with tab_calendario:
                     margin-bottom: 15px;
                     letter-spacing: 0.5px;
                 ">
-                    STATISTICHE PREVISTE (LIVE CALC)
+                    STATISTICHE PREVISTE
+                    (LIVE CALC)
                 </p>
                 """,
                 unsafe_allow_html=True
             )
-
 
             for label, (
                 val_c,
@@ -1681,12 +1431,10 @@ with tab_calendario:
                     unsafe_allow_html=True
                 )
 
-
         str_lit.markdown(
             "<br>",
             unsafe_allow_html=True
         )
-
 
         str_lit.markdown(
             f"""
@@ -1698,56 +1446,43 @@ with tab_calendario:
             unsafe_allow_html=True
         )
 
-
         col1, col2, col3 = str_lit.columns(3)
-
 
         col1.metric(
             "Segno 1 (Casa)",
             f"{p_c:.1f}%",
-            f"Quota equa: {100 / p_c:.2f}"
+            f"Quota equa: {100/p_c:.2f}"
             if p_c > 0
             else "N.D."
         )
 
-
         col2.metric(
             "Segno X (Pareggio)",
             f"{p_p:.1f}%",
-            f"Quota equa: {100 / p_p:.2f}"
+            f"Quota equa: {100/p_p:.2f}"
             if p_p > 0
             else "N.D."
         )
 
-
         col3.metric(
             "Segno 2 (Trasferta)",
             f"{p_t:.1f}%",
-            f"Quota equa: {100 / p_t:.2f}"
+            f"Quota equa: {100/p_t:.2f}"
             if p_t > 0
             else "N.D."
         )
-
 
         str_lit.markdown(
             "<br>",
             unsafe_allow_html=True
         )
 
-
         str_lit.markdown(
             "#### ⚽ Analisi Under / Over & Goal / No Goal"
         )
 
-
-        (
-            uo_col1,
-            uo_col2,
-            uo_col3,
-            uo_col4,
-            uo_col5
-        ) = str_lit.columns(5)
-
+        uo_col1, uo_col2, uo_col3, \
+        uo_col4, uo_col5 = str_lit.columns(5)
 
         uo_col1.metric(
             "Over 2.5",
@@ -1755,20 +1490,17 @@ with tab_calendario:
             f"Under: {prob_under_over[2.5] * 100:.1f}%"
         )
 
-
         uo_col2.metric(
             "Over 1.5",
             f"{(1 - prob_under_over[1.5]) * 100:.1f}%",
             f"Under: {prob_under_over[1.5] * 100:.1f}%"
         )
 
-
         uo_col3.metric(
             "Over 3.5",
             f"{(1 - prob_under_over[3.5]) * 100:.1f}%",
             f"Under: {prob_under_over[3.5] * 100:.1f}%"
         )
-
 
         uo_col4.metric(
             "Goal (BTTS)",
@@ -1781,7 +1513,6 @@ with tab_calendario:
             )
         )
 
-
         uo_col5.metric(
             "No Goal",
             f"{prob_btts_no * 100:.1f}%",
@@ -1793,20 +1524,16 @@ with tab_calendario:
             )
         )
 
-
         str_lit.markdown(
             "<br>",
             unsafe_allow_html=True
         )
 
-
         str_lit.markdown(
             "#### 🎯 Top 3 Risultati Esatti più Probabili"
         )
 
-
         lista_esatti = []
-
 
         for rc in range(6):
 
@@ -1822,56 +1549,39 @@ with tab_calendario:
                     )
                 )
 
-
         lista_esatti.sort(
             key=lambda x: x[1],
             reverse=True
         )
 
-
-        c_res1, c_res2, c_res3 = (
-            str_lit.columns(3)
-        )
-
+        c_res1, c_res2, c_res3 = str_lit.columns(3)
 
         with c_res1:
 
             str_lit.info(
-                f"""
-                🥇 1° Esatto:
-                **{lista_esatti[0][0][0]}
-                -
-                {lista_esatti[0][0][1]}**
-                ({lista_esatti[0][1] * 100:.1f}%)
-                """
+                f"🥇 1° Esatto: "
+                f"**{lista_esatti[0][0][0]} - "
+                f"{lista_esatti[0][0][1]}** "
+                f"({lista_esatti[0][1] * 100:.1f}%)"
             )
-
 
         with c_res2:
 
             str_lit.info(
-                f"""
-                🥈 2° Esatto:
-                **{lista_esatti[1][0][0]}
-                -
-                {lista_esatti[1][0][1]}**
-                ({lista_esatti[1][1] * 100:.1f}%)
-                """
+                f"🥈 2° Esatto: "
+                f"**{lista_esatti[1][0][0]} - "
+                f"{lista_esatti[1][0][1]}** "
+                f"({lista_esatti[1][1] * 100:.1f}%)"
             )
-
 
         with c_res3:
 
             str_lit.info(
-                f"""
-                🥉 3° Esatto:
-                **{lista_esatti[2][0][0]}
-                -
-                {lista_esatti[2][0][1]}**
-                ({lista_esatti[2][1] * 100:.1f}%)
-                """
+                f"🥉 3° Esatto: "
+                f"**{lista_esatti[2][0][0]} - "
+                f"{lista_esatti[2][0][1]}** "
+                f"({lista_esatti[2][1] * 100:.1f}%)"
             )
-
 
         str_lit.markdown(
             "</div>",
@@ -1880,7 +1590,7 @@ with tab_calendario:
 
 
 # ============================================================
-# TAB 2 — CLASSIFICA
+# TAB 2 - CLASSIFICA
 # ============================================================
 
 with tab_classifica:
@@ -1888,7 +1598,6 @@ with tab_classifica:
     str_lit.subheader(
         "🏆 Classifica e Rendimento"
     )
-
 
     if statistiche_squadre:
 
@@ -1929,20 +1638,17 @@ with tab_classifica:
 
                 for k, v in sorted(
                     statistiche_squadre.items(),
-                    key=lambda x:
-                        x[1]["punti"],
+                    key=lambda x: x[1]["punti"],
                     reverse=True
                 )
             ]
         )
-
 
         str_lit.dataframe(
             df_cls,
             use_container_width=True,
             hide_index=True
         )
-
 
         str_lit.download_button(
             "📥 Scarica CSV",
@@ -1953,7 +1659,6 @@ with tab_classifica:
             "text/csv"
         )
 
-
     else:
 
         str_lit.warning(
@@ -1962,7 +1667,7 @@ with tab_classifica:
 
 
 # ============================================================
-# TAB 3 — VALUE BET
+# TAB 3 - VALUE BET
 # ============================================================
 
 with tab_value:
@@ -1971,9 +1676,7 @@ with tab_value:
         "🔍 Calcolatore Value Bet & Kelly Criterion"
     )
 
-
     c1, c2, c3 = str_lit.columns(3)
-
 
     p_stim = c1.slider(
         "Probabilità Modello (%)",
@@ -1982,14 +1685,12 @@ with tab_value:
         45.0
     )
 
-
     q_book = c2.number_input(
         "Quota Bookmaker",
         1.01,
         50.0,
         2.30
     )
-
 
     bankroll = c3.number_input(
         "Bankroll (€)",
@@ -1998,17 +1699,12 @@ with tab_value:
         1000.0
     )
 
-
-    q_equa = (
-        100 / p_stim
-    )
-
+    q_equa = 100 / p_stim
 
     ev = (
         (p_stim / 100)
         * q_book
     ) - 1
-
 
     b = q_book - 1
 
@@ -2016,39 +1712,32 @@ with tab_value:
 
     q = 1 - p
 
-
     kelly_fraction = max(
         0.0,
         ((b * p - q) / b)
     ) * 0.25
-
 
     stake = (
         bankroll
         * kelly_fraction
     )
 
-
     m1, m2, m3 = str_lit.columns(3)
-
 
     m1.metric(
         "Quota Equa",
         f"{q_equa:.2f}"
     )
 
-
     m2.metric(
         "Valore Atteso (EV)",
         f"{ev * 100:+.2f}%"
     )
 
-
     m3.metric(
         "Stake (Kelly 25%)",
         f"€{stake:.2f}"
     )
-
 
     if q_book > q_equa:
 
@@ -2064,7 +1753,7 @@ with tab_value:
 
 
 # ============================================================
-# TAB 4 — GRAFICI
+# TAB 4 - GRAFICI
 # ============================================================
 
 with tab_grafici:
@@ -2073,7 +1762,6 @@ with tab_grafici:
         "📊 Trend e Prestazioni"
     )
 
-
     if statistiche_squadre:
 
         df_g = pd.DataFrame(
@@ -2081,13 +1769,14 @@ with tab_grafici:
                 {
                     "Squadra": k,
                     "Punti": v["punti"],
-                    "Media Gol Fatti": v["media_gf"]
+                    "Media Gol Fatti":
+                        v["media_gf"]
                 }
 
-                for k, v in statistiche_squadre.items()
+                for k, v
+                in statistiche_squadre.items()
             ]
         )
-
 
         fig = px.bar(
             df_g,
@@ -2097,7 +1786,6 @@ with tab_grafici:
             template="plotly_dark",
             title="Punti e Potenziale Offensivo"
         )
-
 
         str_lit.plotly_chart(
             fig,
@@ -2116,28 +1804,27 @@ def genera_dataset_valore(
 
     righe = []
 
-
     for m in matches_list:
 
         h = m["homeTeam"]["name"]
-
         a = m["awayTeam"]["name"]
-
 
         if (
             h in stats_dict
             and a in stats_dict
         ):
 
-            lc = stats_dict[h]["media_gf"]
+            lc = stats_dict[
+                h
+            ]["media_gf"]
 
-            lt = stats_dict[a]["media_gf"]
-
+            lt = stats_dict[
+                a
+            ]["media_gf"]
 
             p_c = 0.0
             p_p = 0.0
             p_t = 0.0
-
 
             for rc in range(6):
 
@@ -2155,7 +1842,6 @@ def genera_dataset_valore(
                         )
                     )
 
-
                     if rc > rt:
 
                         p_c += prob
@@ -2168,31 +1854,17 @@ def genera_dataset_valore(
 
                         p_t += prob
 
-
             tot_prob = (
                 p_c
                 + p_p
                 + p_t
             )
 
-
             if tot_prob > 0:
 
-                p_c = (
-                    p_c
-                    / tot_prob
-                )
-
-                p_p = (
-                    p_p
-                    / tot_prob
-                )
-
-                p_t = (
-                    p_t
-                    / tot_prob
-                )
-
+                p_c /= tot_prob
+                p_p /= tot_prob
+                p_t /= tot_prob
 
             esiti = [
 
@@ -2212,17 +1884,13 @@ def genera_dataset_valore(
                 )
             ]
 
-
             esiti.sort(
                 key=lambda x: x[1],
                 reverse=True
             )
 
-
-            miglior_selezione, prob_scelta = (
-                esiti[0]
-            )
-
+            miglior_selezione, \
+            prob_scelta = esiti[0]
 
             q_book = round(
                 1.03
@@ -2233,16 +1901,15 @@ def genera_dataset_valore(
                 2
             )
 
-
             edge = round(
                 (
                     prob_scelta
                     * q_book
                     - 1
-                ) * 100,
+                )
+                * 100,
                 1
             )
-
 
             righe.append(
                 {
@@ -2278,7 +1945,6 @@ def genera_dataset_valore(
                 }
             )
 
-
     if not righe:
 
         return pd.DataFrame(
@@ -2293,7 +1959,6 @@ def genera_dataset_valore(
             ]
         )
 
-
     return pd.DataFrame(righe)
 
 
@@ -2304,7 +1969,7 @@ df_val = genera_dataset_valore(
 
 
 # ============================================================
-# TAB 5 — SCHEDINE AI
+# TAB 5 - SCHEDINE AI
 # ============================================================
 
 with tab_ai_schedine:
@@ -2313,14 +1978,13 @@ with tab_ai_schedine:
         "🤖 Schedine Smart & Combo AI"
     )
 
-
     if (
         not df_val.empty
-        and "Competizione" in df_val.columns
+        and "Competizione"
+        in df_val.columns
     ):
 
         c_s1, c_s2 = str_lit.columns(2)
-
 
         comp_schedina = c_s1.selectbox(
             "Torneo",
@@ -2331,12 +1995,10 @@ with tab_ai_schedine:
             )
         )
 
-
         df_comp_val = df_val[
             df_val["Competizione"]
             == comp_schedina
         ]
-
 
         giornate_val = sorted(
             df_comp_val[
@@ -2344,16 +2006,12 @@ with tab_ai_schedine:
             ].unique()
         )
 
-
         if giornate_val:
 
-            giornata_schedina = (
-                c_s2.selectbox(
-                    "Giornata",
-                    giornate_val
-                )
+            giornata_schedina = c_s2.selectbox(
+                "Giornata",
+                giornate_val
             )
-
 
             df_filtrato_giornata = (
                 df_comp_val[
@@ -2361,7 +2019,6 @@ with tab_ai_schedine:
                     == giornata_schedina
                 ]
             )
-
 
             if not df_filtrato_giornata.empty:
 
@@ -2372,20 +2029,17 @@ with tab_ai_schedine:
                     )
                 )
 
-
-                default_eventi = min(
+                min_eventi = min(
                     3,
                     max_eventi
                 )
-
 
                 num_ev = str_lit.slider(
                     "Eventi in Multipla",
                     2,
                     max_eventi,
-                    default_eventi
+                    min_eventi
                 )
-
 
                 subset = (
                     df_filtrato_giornata
@@ -2396,19 +2050,16 @@ with tab_ai_schedine:
                     .head(num_ev)
                 )
 
-
                 quota_tot = np.prod(
                     subset[
                         "Quota_Book"
                     ].values
                 )
 
-
                 str_lit.metric(
                     "📈 Quota Totale Accumulatore",
                     f"{quota_tot:.2f}"
                 )
-
 
                 str_lit.dataframe(
                     subset,
@@ -2418,7 +2069,7 @@ with tab_ai_schedine:
 
 
 # ============================================================
-# TAB 6 — VALUE FINDER
+# TAB 6 - VALUE FINDER
 # ============================================================
 
 with tab_value_finder:
@@ -2426,7 +2077,6 @@ with tab_value_finder:
     str_lit.subheader(
         "⚡ Scanner Value Finder"
     )
-
 
     if not df_val.empty:
 
@@ -2437,7 +2087,6 @@ with tab_value_finder:
             3.0
         )
 
-
         str_lit.dataframe(
             df_val[
                 df_val["Edge"]
@@ -2447,7 +2096,6 @@ with tab_value_finder:
             hide_index=True
         )
 
-
     else:
 
         str_lit.info(
@@ -2456,7 +2104,7 @@ with tab_value_finder:
 
 
 # ============================================================
-# TAB 7 — MONTE CARLO
+# TAB 7 - MONTE CARLO
 # ============================================================
 
 with tab_monte_carlo:
@@ -2464,7 +2112,6 @@ with tab_monte_carlo:
     str_lit.subheader(
         "🎲 Simulatore Monte Carlo Avanzato"
     )
-
 
     if statistiche_squadre:
 
@@ -2474,9 +2121,7 @@ with tab_monte_carlo:
             )
         )
 
-
         c1, c2, c3 = str_lit.columns(3)
-
 
         sq_c = c1.selectbox(
             "Casa",
@@ -2484,7 +2129,6 @@ with tab_monte_carlo:
             index=0,
             key="mc_casa"
         )
-
 
         sq_t = c2.selectbox(
             "Trasferta",
@@ -2496,7 +2140,6 @@ with tab_monte_carlo:
             key="mc_trasf"
         )
 
-
         iterazioni = c3.slider(
             "Iterazioni",
             1000,
@@ -2505,7 +2148,6 @@ with tab_monte_carlo:
             step=1000,
             key="mc_iter"
         )
-
 
         if str_lit.button(
             "🚀 Esegui Simulazione",
@@ -2519,7 +2161,6 @@ with tab_monte_carlo:
                 * 1.05
             )
 
-
             lt = (
                 statistiche_squadre[
                     sq_t
@@ -2527,18 +2168,15 @@ with tab_monte_carlo:
                 * 0.95
             )
 
-
             gc_sim = np.random.poisson(
                 lc,
                 iterazioni
             )
 
-
             gt_sim = np.random.poisson(
                 lt,
                 iterazioni
             )
-
 
             v_c = (
                 np.sum(
@@ -2547,14 +2185,12 @@ with tab_monte_carlo:
                 / (iterazioni / 100)
             )
 
-
             v_p = (
                 np.sum(
                     gc_sim == gt_sim
                 )
                 / (iterazioni / 100)
             )
-
 
             v_t = (
                 np.sum(
@@ -2563,12 +2199,10 @@ with tab_monte_carlo:
                 / (iterazioni / 100)
             )
 
-
             tot_gol = (
                 gc_sim
                 + gt_sim
             )
-
 
             p_over15 = (
                 np.sum(
@@ -2577,7 +2211,6 @@ with tab_monte_carlo:
                 / (iterazioni / 100)
             )
 
-
             p_over25 = (
                 np.sum(
                     tot_gol > 2.5
@@ -2585,101 +2218,88 @@ with tab_monte_carlo:
                 / (iterazioni / 100)
             )
 
-
             p_btts = (
                 np.sum(
                     (gc_sim > 0)
-                    & (gt_sim > 0)
+                    &
+                    (gt_sim > 0)
                 )
                 / (iterazioni / 100)
             )
-
 
             str_lit.markdown(
                 "#### 📊 Esiti 1X2 dalle Simulazioni"
             )
 
-
             m1, m2, m3 = str_lit.columns(3)
-
 
             m1.metric(
                 "Vittoria Casa (1)",
                 f"{v_c:.1f}%",
                 (
-                    f"Quota equa: {100 / v_c:.2f}"
+                    f"Quota equa: "
+                    f"{100 / v_c:.2f}"
                     if v_c > 0
                     else "N.D."
                 )
             )
 
-
             m2.metric(
                 "Pareggio (X)",
                 f"{v_p:.1f}%",
                 (
-                    f"Quota equa: {100 / v_p:.2f}"
+                    f"Quota equa: "
+                    f"{100 / v_p:.2f}"
                     if v_p > 0
                     else "N.D."
                 )
             )
 
-
             m3.metric(
                 "Vittoria Trasferta (2)",
                 f"{v_t:.1f}%",
                 (
-                    f"Quota equa: {100 / v_t:.2f}"
+                    f"Quota equa: "
+                    f"{100 / v_t:.2f}"
                     if v_t > 0
                     else "N.D."
                 )
             )
-
 
             str_lit.markdown(
                 "<br>",
                 unsafe_allow_html=True
             )
 
-
             str_lit.markdown(
                 "#### ⚽ Mercati di Gol (Simulati)"
             )
 
-
-            uo1, uo2, uo3 = (
-                str_lit.columns(3)
-            )
-
+            uo1, uo2, uo3 = str_lit.columns(3)
 
             uo1.metric(
                 "Over 1.5 Gol",
                 f"{p_over15:.1f}%"
             )
 
-
             uo2.metric(
                 "Over 2.5 Gol",
                 f"{p_over25:.1f}%"
             )
-
 
             uo3.metric(
                 "Goal (BTTS)",
                 f"{p_btts:.1f}%"
             )
 
-
             str_lit.markdown(
                 "<br>",
                 unsafe_allow_html=True
             )
 
-
             str_lit.markdown(
                 "#### 🎯 Top 3 Risultati Esatti più Frequenti"
             )
-
 
             risultati_coppie = list(
                 zip(
@@ -2687,7 +2307,6 @@ with tab_monte_carlo:
                     gt_sim
                 )
             )
-
 
             conteggio_esatti = (
                 pd.Series(
@@ -2697,18 +2316,15 @@ with tab_monte_carlo:
                 .head(3)
             )
 
-
             r_col1, r_col2, r_col3 = (
                 str_lit.columns(3)
             )
-
 
             colonne_res = [
                 r_col1,
                 r_col2,
                 r_col3
             ]
-
 
             for idx, (
                 (rc, rt),
@@ -2722,7 +2338,6 @@ with tab_monte_carlo:
                     / iterazioni
                 ) * 100
 
-
                 with colonne_res[idx]:
 
                     medaglia = [
@@ -2731,21 +2346,16 @@ with tab_monte_carlo:
                         "🥉"
                     ][idx]
 
-
                     str_lit.info(
-                        f"""
-                        {medaglia}
-                        **{rc} - {rt}**
-                        ({perc:.1f}% delle volte)
-                        """
+                        f"{medaglia} "
+                        f"**{rc} - {rt}** "
+                        f"({perc:.1f}% delle volte)"
                     )
-
 
             str_lit.markdown(
                 "<br>",
                 unsafe_allow_html=True
             )
-
 
             df_dist = pd.DataFrame(
                 {
@@ -2753,7 +2363,6 @@ with tab_monte_carlo:
                         tot_gol
                 }
             )
-
 
             fig_mc = px.histogram(
                 df_dist,
@@ -2769,7 +2378,6 @@ with tab_monte_carlo:
                 template="plotly_dark"
             )
 
-
             str_lit.plotly_chart(
                 fig_mc,
                 use_container_width=True
@@ -2777,7 +2385,7 @@ with tab_monte_carlo:
 
 
 # ============================================================
-# TAB 8 — AUDIT
+# TAB 8 - AUDIT
 # ============================================================
 
 with tab_audit:
@@ -2786,13 +2394,9 @@ with tab_audit:
         "🛡 Modulo di Audit & Calibrazione"
     )
 
-
     if not df_val.empty:
 
-        c1, c2, c3 = (
-            str_lit.columns(3)
-        )
-
+        c1, c2, c3 = str_lit.columns(3)
 
         c1.metric(
             "Brier Score",
@@ -2800,23 +2404,19 @@ with tab_audit:
             "-0.012"
         )
 
-
         c2.metric(
             "Log Loss",
             "0.6120"
         )
-
 
         c3.metric(
             "Calibrazione",
             "98.4%"
         )
 
-
         str_lit.success(
             "✅ Modulo statisticamente stabile."
         )
-
 
     else:
 
