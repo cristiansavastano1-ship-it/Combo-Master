@@ -1,3 +1,4 @@
+
 import math
 import pandas as pd
 import numpy as np
@@ -86,12 +87,9 @@ str_lit.markdown(
     unsafe_allow_html=True,
 )
 
-# Dizionario delle leghe con supporto sia API ufficiali che dataset open-source GitHub
+# --- DIZIONARIO COMPETIZIONI (Tutti i campionati originali + Serie B e C Open Data) ---
 LEAGUES = {
     "🇮🇹 Serie A (Italia)": {"type": "api", "code": "SA"},
-    "🇬🇧 Premier League (Inghilterra)": {"type": "api", "code": "PL"},
-    "🇪🇸 La Liga (Spagna)": {"type": "api", "code": "PD"},
-    "🇪🇺 Champions League": {"type": "api", "code": "CL"},
     "🇮🇹 Serie B (Italia) [Open Data]": {
         "type": "github_csv", 
         "url": "https://raw.githubusercontent.com/openfootball/italy/master/2025-26/2-serie-b.csv"
@@ -99,7 +97,13 @@ LEAGUES = {
     "🇮🇹 Serie C - Girone A [Open Data]": {
         "type": "github_csv", 
         "url": "https://raw.githubusercontent.com/openfootball/italy/master/2025-26/3-serie-c-a.csv"
-    }
+    },
+    "🇬🇧 Premier League (Inghilterra)": {"type": "api", "code": "PL"},
+    "🇪🇸 La Liga (Spagna)": {"type": "api", "code": "PD"},
+    "🇩🇪 Bundesliga (Germania)": {"type": "api", "code": "BL1"},
+    "🇫🇷 Ligue 1 (Francia)": {"type": "api", "code": "FL1"},
+    "🇳🇱 Eredivisie (Olanda)": {"type": "api", "code": "DED"},
+    "🇪🇺 Champions League": {"type": "api", "code": "CL"},
 }
 
 str_lit.sidebar.markdown("### ⚙ Configurazione")
@@ -113,8 +117,8 @@ if modalita_campionati == "Singolo Campionato":
     campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Campionato", list(LEAGUES.keys()))
     selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
 else:
-    str_lit.sidebar.markdown("Seleziona i tornei:")
-    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["🇮🇹 Serie A (Italia)", "🇮🇹 Serie B (Italia) [Open Data]"]))}
+    str_lit.sidebar.markdown("Seleziona i tornei desiderati:")
+    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["🇮🇹 Serie A (Italia)", "🇮🇹 Serie B (Italia) [Open Data]"]))]
 
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
     "📅 Calendario",
@@ -216,7 +220,6 @@ for c_nome, info in selezionati_dict.items():
     elif info["type"] == "github_csv":
         df_gh = scarica_dati_github(info["url"])
         if df_gh is not None and not df_gh.empty:
-            # Adattamento standard colonne openfootball (Date, Team 1, Team 2, FT)
             for _, row in df_gh.iterrows():
                 h = str(row.get("Team 1", row.get("HomeTeam", "Casa")))
                 a = str(row.get("Team 2", row.get("AwayTeam", "Trasferta")))
@@ -240,7 +243,6 @@ for c_nome, info in selezionati_dict.items():
                     "status": "FINISHED" if isinstance(g_c, int) else "TIMED"
                 })
                 
-                # Calcolo medie base per le statistiche squadre dai dati open source
                 for sq in [h, a]:
                     if sq not in statistiche_squadre:
                         statistiche_squadre[sq] = {"media_gf": 1.2, "media_gs": 1.1, "punti": 15, "Competizione": c_nome}
@@ -289,7 +291,7 @@ with tab_calendario:
                 if str_lit.button("📊 Analizza Match", key=f"btn_{idx}"):
                     str_lit.session_state["match_attivo"] = row
     else:
-        str_lit.info("👈 Seleziona una competizione nella barra laterale per visualizzare le partite.")
+        str_lit.info("👈 Inserisci la chiave API nella barra laterale o seleziona un campionato valido.")
 
     if "match_attivo" in str_lit.session_state:
         m = str_lit.session_state["match_attivo"]
