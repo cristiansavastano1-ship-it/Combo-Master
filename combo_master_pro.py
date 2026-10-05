@@ -1,4 +1,3 @@
-
 import math
 import pandas as pd
 import numpy as np
@@ -87,7 +86,7 @@ str_lit.markdown(
     unsafe_allow_html=True,
 )
 
-# --- DIZIONARIO COMPETIZIONI (Tutti i campionati originali + Serie B e C Open Data) ---
+# --- DIZIONARIO COMPETIZIONI ---
 LEAGUES = {
     "🇮🇹 Serie A (Italia)": {"type": "api", "code": "SA"},
     "🇮🇹 Serie B (Italia) [Open Data]": {
@@ -118,7 +117,10 @@ if modalita_campionati == "Singolo Campionato":
     selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
 else:
     str_lit.sidebar.markdown("Seleziona i tornei desiderati:")
-    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["🇮🇹 Serie A (Italia)", "🇮🇹 Serie B (Italia) [Open Data]"]))]
+    selezionati_dict = {
+        k: v for k, v in LEAGUES.items() 
+        if str_lit.sidebar.checkbox(k, value=(k in ["🇮🇹 Serie A (Italia)", "🇮🇹 Serie B (Italia) [Open Data]"]))
+    }
 
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
     "📅 Calendario",
