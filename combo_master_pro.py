@@ -91,11 +91,11 @@ LEAGUES = {
     "🇮🇹 Serie A (Italia)": {"type": "api", "code": "SA"},
     "🇮🇹 Serie B (Italia) [Open Data]": {
         "type": "github_csv", 
-        "url": "https://raw.githubusercontent.com/openfootball/italy/master/2025-26/2-serie-b.csv"
+        "url": "https://raw.githubusercontent.com/footballcsv/italy/master/2025-26/2-serie-b.csv"
     },
     "🇮🇹 Serie C - Girone A [Open Data]": {
         "type": "github_csv", 
-        "url": "https://raw.githubusercontent.com/openfootball/italy/master/2025-26/3-serie-c-a.csv"
+        "url": "https://raw.githubusercontent.com/footballcsv/italy/master/2025-26/3-serie-c-a.csv"
     },
     "🇬🇧 Premier League (Inghilterra)": {"type": "api", "code": "PL"},
     "🇪🇸 La Liga (Spagna)": {"type": "api", "code": "PD"},
@@ -223,24 +223,54 @@ for c_nome, info in selezionati_dict.items():
         df_gh = scarica_dati_github(info["url"])
         if df_gh is not None and not df_gh.empty:
             for _, row in df_gh.iterrows():
-                h = str(row.get("Team 1", row.get("HomeTeam", "Casa")))
-                a = str(row.get("Team 2", row.get("AwayTeam", "Trasferta")))
-                ft = str(row.get("FT", row.get("Result", "-:-")))
+                # Lettura flessibile delle colonne per adattarsi a diverse strutture CSV
+                h, a = None, None
+                for col in df_gh.columns:
+                    col_l = col.lower().strip()
+                    if col_l in ["team 1", "hometeam", "home", "squadra casa", "home_team"]:
+                        h = str(row[col])
+                    elif col_l in ["team 2", "awayteam", "away", "squadra ospite", "away_team"]:
+                        a = str(row[col])
+                if not h: h = str(row.get("Team 1", row.get("HomeTeam", "Casa")))
+                if not a: a = str(row.get("Team 2", row.get("AwayTeam", "Trasferta")))
+                
+                ft = "-:-"
+                for col in df_gh.columns:
+                    col_l = col.lower().strip()
+                    if col_l in ["ft", "result", "score", "risultato"]:
+                        ft = str(row[col])
+                        break
+                if ft == "-:-":
+                    ft = str(row.get("FT", row.get("Result", "-:-")))
                 
                 g_c, g_t = "-", "-"
-                if "-" in ft:
-                    parti = ft.split("-")
+                if "-" in str(ft):
+                    parti = str(ft).split("-")
                     try:
                         g_c = int(parti[0].strip())
                         g_t = int(parti[1].strip())
                     except: pass
                 
+                round_val = 1
+                for col in df_gh.columns:
+                    if col.lower().strip() in ["round", "giornata", "matchday"]:
+                        val_r = row[col]
+                        if str(val_r).isdigit():
+                            round_val = int(val_r)
+                        break
+                
+                date_val = "2026-01-01"
+                for col in df_gh.columns:
+                    if col.lower().strip() in ["date", "data", "matchdate"]:
+                        date_val = str(row[col])[:10]
+                        break
+
                 matches_raw.append({
                     "Competizione": c_nome,
-                    "matchday": int(row.get("Round", 1)) if str(row.get("Round", 1)).isdigit() else 1,
+                    "matchday": round_val,
                     "homeTeam": {"name": h},
                     "awayTeam": {"name": a},
-                    "utcDate": str(row.get("Date", "2026-01-01"))[:10],
+                    "utcDate": date_val,
                     "score": {"fullTime": {"home": g_c if isinstance(g_c, int) else None, "away": g_t if isinstance(g_t, int) else None}},
                     "status": "FINISHED" if isinstance(g_c, int) else "TIMED"
                 })
