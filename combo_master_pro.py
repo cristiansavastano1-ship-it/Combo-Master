@@ -216,12 +216,12 @@ with tab_calendario:
         
         c_f1, c_f2 = str_lit.columns(2)
         competizioni_disponibili = sorted(df["Competizione"].unique())
-        comp_sel = c_f1.selectbox("🏆 Torneo", competizioni_disponibili)
+        comp_sel = c_f1.selectbox("🏆 Torneo", competizioni_disponibili, key="mobile_comp_select")
         
         df_comp = df[df["Competizione"] == comp_sel]
         giornate = sorted(df_comp["giornata"].unique())
         if giornate:
-            giornata_sel = c_f2.selectbox("📅 Giornata", giornate)
+            giornata_sel = c_f2.selectbox("📅 Giornata", giornate, key="mobile_giornata_select")
             for idx, row in df_comp[df_comp["giornata"] == giornata_sel].iterrows():
                 str_lit.markdown(
                     f"""
@@ -454,11 +454,11 @@ with tab_ai_schedine:
     str_lit.subheader("🤖 Schedine Smart & Combo AI")
     if not df_val.empty and "Competizione" in df_val.columns:
         c_s1, c_s2 = str_lit.columns(2)
-        comp_schedina = c_s1.selectbox("Torneo", sorted(df_val["Competizione"].unique()))
+        comp_schedina = c_s1.selectbox("Torneo", sorted(df_val["Competizione"].unique()), key="mobile_schedina_torneo")
         df_comp_val = df_val[df_val["Competizione"] == comp_schedina]
         giornate_val = sorted(df_comp_val["Giornata"].unique())
         if giornate_val:
-            giornata_schedina = c_s2.selectbox("Giornata", giornate_val)
+            giornata_schedina = c_s2.selectbox("Giornata", giornate_val, key="mobile_schedina_giornata")
             df_filtrato_giornata = df_comp_val[df_comp_val["Giornata"] == giornata_schedina]
             if not df_filtrato_giornata.empty:
                 num_ev = str_lit.slider("Eventi in Multipla", 2, min(6, len(df_filtrato_giornata)), min(3, len(df_filtrato_giornata)))
