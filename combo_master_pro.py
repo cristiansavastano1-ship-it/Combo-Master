@@ -78,9 +78,9 @@ str_lit.markdown(
 # Header principale
 str_lit.markdown(
     """
-    <div style="background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); padding: 35px; border-radius: 20px; border: 1px solid #312e81; text-align: center; margin-bottom: 30px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);">
-        <h1 style="color: #f8fafc; font-weight: 800; font-size: 2.2rem; margin: 0; letter-spacing: -0.5px;">⚽ COMBO MASTER PRO AI</h1>
-        <p style="color: #94a3b8; font-size: 1.05rem; margin-top: 10px;">Suite predittiva avanzata con Poisson, Monte Carlo e Value Analytics</p>
+    <div style="background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); padding: 25px; border-radius: 20px; border: 1px solid #312e81; text-align: center; margin-bottom: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);">
+        <h1 style="color: #f8fafc; font-weight: 800; font-size: 2.0rem; margin: 0; letter-spacing: -0.5px;">⚽ COMBO MASTER PRO AI</h1>
+        <p style="color: #94a3b8; font-size: 0.95rem; margin-top: 8px;">Suite predittiva avanzata con Poisson, Monte Carlo e Value Analytics</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -96,18 +96,15 @@ LEAGUES = {
     "Champions League": ("CL", "football-data"),
 }
 
-str_lit.sidebar.markdown("### ⚙ Configurazione")
+# --- SELETTORE PRINCIPALE IN EVIDENZA (OTTIMIZZATO ANCHE PER MOBILE) ---
+str_lit.markdown("### 🏆 Seleziona Campionato (Mobile & Desktop)")
+campionato_scelto = str_lit.selectbox("Scegli il torneo da analizzare", list(LEAGUES.keys()), label_visibility="collapsed")
+selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
+
+str_lit.sidebar.markdown("### ⚙ Configurazione API")
 api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value="d29062443f334e339e7b953ed78a1ac3", type="password")
 str_lit.sidebar.markdown("---")
-
-modalita_campionati = str_lit.sidebar.radio("🌐 Modalità Campionati", ["Singolo Campionato", "Multi-Campionato (Globale)"])
-
-if modalita_campionati == "Singolo Campionato":
-    campionato_scelto = str_lit.sidebar.selectbox("🏆 Seleziona Campionato", list(LEAGUES.keys()))
-    selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
-else:
-    str_lit.sidebar.markdown("Seleziona i tornei:")
-    selezionati_dict = {k: v for k, v in LEAGUES.items() if str_lit.sidebar.checkbox(k, value=(k in ["Serie A (Italia)", "Premier League (Inghilterra)", "Champions League"]))}
+str_lit.sidebar.info("💡 Suggerimento: Da cellulare puoi cambiare campionato direttamente dal menu a tendina in alto nella pagina principale.")
 
 tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_value_finder, tab_monte_carlo, tab_audit = str_lit.tabs([
     "📅 Calendario",
