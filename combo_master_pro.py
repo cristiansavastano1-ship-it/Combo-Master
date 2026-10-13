@@ -102,7 +102,9 @@ campionato_scelto = str_lit.selectbox("Scegli il torneo da analizzare", list(LEA
 selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
 
 str_lit.sidebar.markdown("### ⚙ Configurazione API")
-api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value="d29062443f334e339e7b953ed78a1ac3", type="password")
+# Lettura sicura da secrets con fallback pulito
+default_api_key = str_lit.secrets.get("API_KEY", "")
+api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value=default_api_key, type="password")
 str_lit.sidebar.markdown("---")
 str_lit.sidebar.info("💡 Suggerimento: Da cellulare puoi cambiare campionato direttamente dal menu a tendina in alto nella pagina principale.")
 
@@ -120,14 +122,21 @@ tab_calendario, tab_classifica, tab_value, tab_grafici, tab_ai_schedine, tab_val
 # --- FUNZIONI DI SUPPORTO & MODELLAZIONE ---
 @str_lit.cache_data(ttl=3600)
 def scarica_dati_club(chiave, league_code):
-    if not chiave: return None
+    if not chiave: return None, "Chiave API mancante."
     url = f"https://api.football-data.org/v4/competitions/{league_code}/matches"
     headers = {"X-Auth-Token": chiave}
     try:
         res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200: return res.json()
-    except Exception: pass
-    return None
+        if res.status_code == 200: 
+            return res.json(), None
+        elif res.status_code == 429:
+            return None, "Limite richieste API superato (Rate Limit 429). Riprova tra un minuto."
+        elif res.status_code == 403:
+            return None, "Chiave API non valida o non autorizzata (403 Forbidden)."
+        else:
+            return None, f"Errore server API: {res.status_code}"
+    except Exception as e:
+        return None, f"Errore di connessione: {e}"
 
 @str_lit.cache_data(ttl=3600)
 def scarica_classifica_club(chiave, league_code):
@@ -147,53 +156,48 @@ def calcola_statistiche_avanzate_match(sq_casa, sq_trasf, statistiche_squadre):
     dati_c = statistiche_squadre.get(sq_casa, {"media_gf": 1.4, "media_gs": 1.1})
     dati_t = statistiche_squadre.get(sq_trasf, {"media_gf": 1.1, "media_gs": 1.3})
     
-    xg_c = round(dati_c["media_gf"] * 0.95 + dati_t["media_gs"] * 0.05, 2)
-    xg_t = round(dati_t["media_gf"] * 0.95 + dati_c["media_gs"] * 0.05, 2)
-    
-    tiri_c = round(xg_c * 9.2 + 1.5, 1)
-    tiri_t = round(xg_t * 9.0 + 1.4, 1)
-    
-    porta_c = round(tiri_c * 0.35, 1)
-    porta_t = round(tiri_t * 0.33, 1)
-    
-    falli_c = round(12.0 + (dati_c["media_gs"] * 0.5), 1)
-    falli_t = round(12.5 + (dati_t["media_gs"] * 0.5), 1)
-    
-    offside_c = round(1.4 + (xg_c * 0.2), 1)
-    offside_t = round(1.3 + (xg_t * 0.2), 1)
+    # Modello di Poisson coerente basato sulle reali medie gol
+    lam_c = max(0.2, dati_c["media_gf"] * 0.5 + dati_t["media_gs"] * 0.5)
+    lam_t = max(0.2, dati_t["media_gf"] * 0.5 + dati_c["media_gs"] * 0.5)
     
     return {
-        "Gol Attesi (xG)": (xg_c, xg_t),
-        "Tiri Attesi": (tiri_c, tiri_t),
-        "Tiri in Porta Attesi": (porta_c, porta_t),
-        "Falli Attesi": (falli_c, falli_t),
-        "Fuorigioco Attesi": (offside_c, offside_t)
+        "Media Gol Previsti (Casa)": (round(lam_c, 2)),
+        "Media Gol Previsti (Trasferta)": (round(lam_t, 2))
     }
 
 # --- ACQUISIZIONE DATI ---
 statistiche_squadre = {}
 matches_raw = []
+errore_api = None
 
 for c_nome, (codice_lega, tipo_fonte) in selezionati_dict.items():
     if api_key:
-        dati = scarica_dati_club(api_key, codice_lega)
+        dati, errore_api = scarica_dati_club(api_key, codice_lega)
         dati_classifica = scarica_classifica_club(api_key, codice_lega)
+        
         if dati and "matches" in dati: 
             for m in dati["matches"]:
                 m["Competizione"] = c_nome
                 matches_raw.append(m)
+                
         if dati_classifica and "standings" in dati_classifica:
+            # Correzione bug classifica: estraiamo tassativamente la tabella di tipo 'TOTAL'
             for s in dati_classifica["standings"]:
-                for riga in s.get("table", []):
-                    nome_sq = riga["team"]["name"]
-                    giocate = max(riga["playedGames"], 1)
-                    statistiche_squadre[nome_sq] = {
-                        "media_gf": riga["goalsFor"] / giocate,
-                        "media_gs": riga["goalsAgainst"] / giocate,
-                        "punti": riga["points"],
-                        "forma": "N/D",
-                        "Competizione": c_nome
-                    }
+                if s.get("type") == "TOTAL":
+                    for riga in s.get("table", []):
+                        nome_sq = riga["team"]["name"]
+                        giocate = max(riga["playedGames"], 1)
+                        statistiche_squadre[nome_sq] = {
+                            "media_gf": riga["goalsFor"] / giocate,
+                            "media_gs": riga["goalsAgainst"] / giocate,
+                            "punti": riga["points"],
+                            "Competizione": c_nome
+                        }
+    else:
+        errore_api = "Inserisci la chiave API nella barra laterale per caricare i dati."
+
+if errore_api and not matches_raw:
+    str_lit.warning(f"⚠️ {errore_api}")
 
 # --- TAB 1: CALENDARIO & STUDIO ---
 with tab_calendario:
@@ -239,16 +243,20 @@ with tab_calendario:
                 if str_lit.button("📊 Analizza Match", key=f"btn_{idx}"):
                     str_lit.session_state["match_attivo"] = row
     else:
-        str_lit.info("👈 Inserisci la chiave API nella barra laterale o seleziona un campionato valido.")
+        str_lit.info("👈 Inserisci una chiave API valida nella barra laterale.")
 
     if "match_attivo" in str_lit.session_state:
         m = str_lit.session_state["match_attivo"]
         sq_c, sq_t = m["casa"], m["trasferta"]
-        lam_c = statistiche_squadre.get(sq_c, {}).get("media_gf", 1.4)
-        lam_t = statistiche_squadre.get(sq_t, {}).get("media_gf", 1.1)
+        dati_c = statistiche_squadre.get(sq_c, {"media_gf": 1.4, "media_gs": 1.1})
+        dati_t = statistiche_squadre.get(sq_t, {"media_gf": 1.1, "media_gs": 1.3})
+        
+        # Modello Poisson unificato e rigoroso
+        lam_c = max(0.1, dati_c["media_gf"] * 0.5 + dati_t["media_gs"] * 0.5)
+        lam_t = max(0.1, dati_t["media_gf"] * 0.5 + dati_c["media_gs"] * 0.5)
 
         p_c, p_p, p_t = 0.0, 0.0, 0.0
-        prob_under_over = {0.5: 0.0, 1.5: 0.0, 2.5: 0.0, 3.5: 0.0, 4.5: 0.0}
+        prob_under_over = {1.5: 0.0, 2.5: 0.0, 3.5: 0.0}
         prob_btts_yes = 0.0
         matrice_risultati = np.zeros((6, 6))
 
@@ -270,10 +278,10 @@ with tab_calendario:
                     prob_btts_yes += prob
 
         tot = p_c + p_p + p_t
-        p_c, p_p, p_t = (p_c/tot)*100, (p_p/tot)*100, (p_t/tot)*100
-        prob_btts_no = 1.0 - prob_btts_yes
-
-        stats_match = calcola_statistiche_avanzate_match(sq_c, sq_t, statistiche_squadre)
+        if tot > 0:
+            p_c, p_p, p_t = (p_c/tot)*100, (p_p/tot)*100, (p_t/tot)*100
+        prob_btts_no = max(0.0, 100.0 - (prob_btts_yes * 100))
+        prob_btts_yes = prob_btts_yes * 100
 
         str_lit.markdown(
             f"""
@@ -302,26 +310,24 @@ with tab_calendario:
             )
             
         with col_st:
-            str_lit.markdown("<p style='text-align: center; font-weight: 700; color: #94a3b8; margin-bottom: 15px; letter-spacing: 0.5px;'>STATISTICHE PREVISTE (LIVE CALC)</p>", unsafe_allow_html=True)
-            for label, (val_c, val_t) in stats_match.items():
-                str_lit.markdown(
-                    f"""
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: #111827; padding: 12px 18px; border-radius: 10px; border: 1px solid #1f2937; margin-bottom: 10px;">
-                        <span style="font-weight: 700; color: #38bdf8; font-size: 1.1rem; width: 60px; text-align: left;">{val_c}</span>
-                        <span style="color: #94a3b8; font-size: 0.9rem; font-weight: 600; text-align: center; flex-grow: 1;">{label}</span>
-                        <span style="font-weight: 700; color: #f43f5e; font-size: 1.1rem; width: 60px; text-align: right;">{val_t}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+            str_lit.markdown("<p style='text-align: center; font-weight: 700; color: #94a3b8; margin-bottom: 15px; letter-spacing: 0.5px;'>PARAMETRI DI MODELLO (POISSON)</p>", unsafe_allow_html=True)
+            str_lit.markdown(
+                f"""
+                <div style="background: #111827; padding: 15px; border-radius: 10px; border: 1px solid #1f2937; text-align: center;">
+                    <p style="color: #94a3b8; margin: 0; font-size: 0.9rem;">Forza Offensiva / Difensiva elaborata da Classifica Reale</p>
+                    <h3 style="color: #38bdf8; margin: 10px 0 0 0;">$\lambda$ Casa: {lam_c:.2f} | $\lambda$ Trasferta: {lam_t:.2f}</h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         str_lit.markdown("<br>", unsafe_allow_html=True)
         str_lit.markdown(f"<h3>🔬 Analisi Avanzata Poisson & Mercati: {sq_c} vs {sq_t}</h3>", unsafe_allow_html=True)
         
         col1, col2, col3 = str_lit.columns(3)
-        col1.metric("Segno 1 (Casa)", f"{p_c:.1f}%", f"Quota equa: {100/p_c:.2f}")
-        col2.metric("Segno X (Pareggio)", f"{p_p:.1f}%", f"Quota equa: {100/p_p:.2f}")
-        col3.metric("Segno 2 (Trasferta)", f"{p_t:.1f}%", f"Quota equa: {100/p_t:.2f}")
+        col1.metric("Segno 1 (Casa)", f"{p_c:.1f}%", f"Quota equa: {100/p_c:.2f}" if p_c > 0 else "N.D.")
+        col2.metric("Segno X (Pareggio)", f"{p_p:.1f}%", f"Quota equa: {100/p_p:.2f}" if p_p > 0 else "N.D.")
+        col3.metric("Segno 2 (Trasferta)", f"{p_t:.1f}%", f"Quota equa: {100/p_t:.2f}" if p_t > 0 else "N.D.")
         
         str_lit.markdown("<br>", unsafe_allow_html=True)
         str_lit.markdown("#### ⚽ Analisi Under / Over & Goal / No Goal")
@@ -330,8 +336,8 @@ with tab_calendario:
         uo_col1.metric("Over 2.5", f"{(1 - prob_under_over[2.5])*100:.1f}%", f"Under: {prob_under_over[2.5]*100:.1f}%")
         uo_col2.metric("Over 1.5", f"{(1 - prob_under_over[1.5])*100:.1f}%", f"Under: {prob_under_over[1.5]*100:.1f}%")
         uo_col3.metric("Over 3.5", f"{(1 - prob_under_over[3.5])*100:.1f}%", f"Under: {prob_under_over[3.5]*100:.1f}%")
-        uo_col4.metric("Goal (BTTS)", f"{prob_btts_yes*100:.1f}%", f"Quota: {100/(prob_btts_yes*100):.2f}" if prob_btts_yes > 0 else "N.D.")
-        uo_col5.metric("No Goal", f"{prob_btts_no*100:.1f}%", f"Quota: {100/(prob_btts_no*100):.2f}" if prob_btts_no > 0 else "N.D.")
+        uo_col4.metric("Goal (BTTS)", f"{prob_btts_yes:.1f}%")
+        uo_col5.metric("No Goal", f"{prob_btts_no:.1f}%")
 
         str_lit.markdown("<br>", unsafe_allow_html=True)
         str_lit.markdown("#### 🎯 Top 3 Risultati Esatti più Probabili")
@@ -351,7 +357,7 @@ with tab_calendario:
 
 # --- TAB 2: CLASSIFICA ---
 with tab_classifica:
-    str_lit.subheader("🏆 Classifica e Rendimento")
+    str_lit.subheader("🏆 Classifica e Rendimento Ufficiale")
     if statistiche_squadre:
         df_cls = pd.DataFrame([{
             "Competizione": v.get("Competizione", "Torneo"),
@@ -363,14 +369,14 @@ with tab_classifica:
         str_lit.dataframe(df_cls, use_container_width=True, hide_index=True)
         str_lit.download_button("📥 Scarica CSV", df_cls.to_csv(index=False).encode("utf-8"), "classifica.csv", "text/csv")
     else:
-        str_lit.warning("Dati non disponibili.")
+        str_lit.warning("Dati di classifica non disponibili. Verifica la chiave API.")
 
-# --- TAB 3: VALUE BET ---
+# --- TAB 3: VALUE BET & KELLY ---
 with tab_value:
     str_lit.subheader("🔍 Calcolatore Value Bet & Kelly Criterion")
     c1, c2, c3 = str_lit.columns(3)
     p_stim = c1.slider("Probabilità Modello (%)", 1.0, 100.0, 45.0)
-    q_book = c2.number_input("Quota Bookmaker", 1.01, 50.0, 2.30)
+    q_book = c2.number_input("Quota Bookmaker Reale", 1.01, 50.0, 2.30)
     bankroll = c3.number_input("Bankroll (€)", 10.0, 100000.0, 1000.0)
     
     q_equa = 100 / p_stim
@@ -386,10 +392,10 @@ with tab_value:
     m2.metric("Valore Atteso (EV)", f"{ev*100:+.2f}%")
     m3.metric("Stake (Kelly 25%)", f"€{stake:.2f}")
 
-    if q_book > q_equa:
-        str_lit.success("🔥 VALUE BET CERTIFICATA! Edge Positivo.")
+    if q_book > q_equa and ev > 0:
+        str_lit.success("🔥 VALUE BET CERTIFICATA! Edge Positivo reale.")
     else:
-        str_lit.error("❌ Nessun valore rilevato.")
+        str_lit.error("❌ Nessun valore o Edge negativo rispetto alla quota inserita.")
 
 # --- TAB 4: GRAFICI ---
 with tab_grafici:
@@ -402,10 +408,16 @@ with tab_grafici:
 def genera_dataset_valore(matches_list, stats_dict):
     righe = []
     for m in matches_list:
+        # Filtriamo solo match non ancora disputati (TIMED / SCHEDULED)
+        if m.get("status") not in ["TIMED", "SCHEDULED"]:
+            continue
+            
         h, a = m["homeTeam"]["name"], m["awayTeam"]["name"]
         if h in stats_dict and a in stats_dict:
-            lc = stats_dict[h]["media_gf"]
-            lt = stats_dict[a]["media_gf"]
+            dati_c = stats_dict[h]
+            dati_t = stats_dict[a]
+            lc = max(0.1, dati_c["media_gf"] * 0.5 + dati_t["media_gs"] * 0.5)
+            lt = max(0.1, dati_t["media_gf"] * 0.5 + dati_c["media_gs"] * 0.5)
             
             p_c, p_p, p_t = 0.0, 0.0, 0.0
             for rc in range(6):
@@ -427,21 +439,16 @@ def genera_dataset_valore(matches_list, stats_dict):
             esiti.sort(key=lambda x: x[1], reverse=True)
             miglior_selezione, prob_scelta = esiti[0]
             
-            q_book = round(1.03 / max(0.01, prob_scelta), 2)
-            edge = round((prob_scelta * q_book - 1) * 100, 1)
-            
             righe.append({
                 "Competizione": m.get("Competizione", "Torneo"),
                 "Giornata": m.get("matchday", 1),
                 "Partita": f"{h} vs {a}", 
                 "Selezione": miglior_selezione, 
-                "Prob_Modello": round(prob_scelta * 100, 1), 
-                "Quota_Book": q_book, 
-                "Edge": edge
+                "Prob_Modello (%)": round(prob_scelta * 100, 1)
             })
             
     if not righe:
-        return pd.DataFrame(columns=["Competizione", "Giornata", "Partita", "Selezione", "Prob_Modello", "Quota_Book", "Edge"])
+        return pd.DataFrame(columns=["Competizione", "Giornata", "Partita", "Selezione", "Prob_Modello (%)"])
     return pd.DataFrame(righe)
 
 df_val = genera_dataset_valore(matches_raw, statistiche_squadre)
@@ -459,23 +466,23 @@ with tab_ai_schedine:
             df_filtrato_giornata = df_comp_val[df_comp_val["Giornata"] == giornata_schedina]
             if not df_filtrato_giornata.empty:
                 num_ev = str_lit.slider("Eventi in Multipla", 2, min(6, len(df_filtrato_giornata)), min(3, len(df_filtrato_giornata)))
-                subset = df_filtrato_giornata.sort_values(by="Edge", ascending=False).head(num_ev)
-                quota_tot = np.prod(subset['Quota_Book'].values)
-                str_lit.metric("📈 Quota Totale Accumulatore", f"{quota_tot:.2f}")
+                subset = df_filtrato_giornata.sort_values(by="Prob_Modello (%)", ascending=False).head(num_ev)
                 str_lit.dataframe(subset, use_container_width=True, hide_index=True)
+            else:
+                str_lit.info("Nessuna partita futura disponibile per questa giornata.")
 
 # --- TAB 6: VALUE FINDER ---
 with tab_value_finder:
-    str_lit.subheader("⚡ Scanner Value Finder")
+    str_lit.subheader("⚡ Scanner Value Finder (Match Futuri)")
     if not df_val.empty:
-        min_edge = str_lit.slider("Edge Minimo (%)", 0.0, 25.0, 3.0)
-        str_lit.dataframe(df_val[df_val["Edge"] >= min_edge], use_container_width=True, hide_index=True)
+        min_prob = str_lit.slider("Probabilità Minima Modello (%)", 10.0, 90.0, 45.0)
+        str_lit.dataframe(df_val[df_val["Prob_Modello (%)"] >= min_prob], use_container_width=True, hide_index=True)
     else:
-        str_lit.info("Nessun incontro disponibile.")
+        str_lit.info("Nessun incontro futuro disponibile per il calcolo.")
 
 # --- TAB 7: MONTE CARLO ---
 with tab_monte_carlo:
-    str_lit.subheader("🎲 Simulatore Monte Carlo Avanzato")
+    str_lit.subheader("🎲 Simulatore Monte Carlo Avanzato (Poisson Puro)")
     if statistiche_squadre:
         nomi = sorted(list(statistiche_squadre.keys()))
         c1, c2, c3 = str_lit.columns(3)
@@ -484,8 +491,10 @@ with tab_monte_carlo:
         iterazioni = c3.slider("Iterazioni", 1000, 20000, 5000, step=1000, key="mc_iter")
         
         if str_lit.button("🚀 Esegui Simulazione", key="btn_mc"):
-            lc = statistiche_squadre[sq_c]["media_gf"] * 1.05
-            lt = statistiche_squadre[sq_t]["media_gf"] * 0.95
+            dati_c = statistiche_squadre[sq_c]
+            dati_t = statistiche_squadre[sq_t]
+            lc = max(0.1, dati_c["media_gf"] * 0.5 + dati_t["media_gs"] * 0.5)
+            lt = max(0.1, dati_t["media_gf"] * 0.5 + dati_c["media_gs"] * 0.5)
             
             gc_sim = np.random.poisson(lc, iterazioni)
             gt_sim = np.random.poisson(lt, iterazioni)
@@ -534,12 +543,10 @@ with tab_monte_carlo:
 
 # --- TAB 8: AUDIT ---
 with tab_audit:
-    str_lit.subheader("🛡 Modulo di Audit & Calibrazione")
-    if not df_val.empty:
-        c1, c2, c3 = str_lit.columns(3)
-        c1.metric("Brier Score", "0.1942", "-0.012")
-        c2.metric("Log Loss", "0.6120")
-        c3.metric("Calibrazione", "98.4%")
-        str_lit.success("✅ Modulo statisticamente stabile.")
+    str_lit.subheader("🛡 Modulo di Controllo & Stato Modello")
+    str_lit.info("ℹ️ Questo modulo verifica lo stato di connessione e la coerenza dei dati caricati.")
+    if statistiche_squadre:
+        str_lit.success(f"✅ Connessione API attiva e stabile. Squadre censite nel modello: {len(statistiche_squadre)}")
+        str_lit.metric("Partite caricate in memoria", len(matches_raw))
     else:
-        str_lit.info("Carica i dati per visualizzare l'audit.")
+        str_lit.warning("⚠️ Nessun dato elaborato. Inserisci una chiave API valida.")
