@@ -102,7 +102,6 @@ campionato_scelto = str_lit.selectbox("Scegli il torneo da analizzare", list(LEA
 selezionati_dict = {campionato_scelto: LEAGUES[campionato_scelto]}
 
 str_lit.sidebar.markdown("### ⚙ Configurazione API")
-# Lettura sicura da secrets con fallback pulito
 default_api_key = str_lit.secrets.get("API_KEY", "")
 api_key = str_lit.sidebar.text_input("🔑 API Key (football-data.org)", value=default_api_key, type="password")
 str_lit.sidebar.markdown("---")
@@ -152,19 +151,6 @@ def scarica_classifica_club(chiave, league_code):
 def poisson_prob(lmbda, k):
     return (math.exp(-lmbda) * (lmbda**k)) / math.factorial(k)
 
-def calcola_statistiche_avanzate_match(sq_casa, sq_trasf, statistiche_squadre):
-    dati_c = statistiche_squadre.get(sq_casa, {"media_gf": 1.4, "media_gs": 1.1})
-    dati_t = statistiche_squadre.get(sq_trasf, {"media_gf": 1.1, "media_gs": 1.3})
-    
-    # Modello di Poisson coerente basato sulle reali medie gol
-    lam_c = max(0.2, dati_c["media_gf"] * 0.5 + dati_t["media_gs"] * 0.5)
-    lam_t = max(0.2, dati_t["media_gf"] * 0.5 + dati_c["media_gs"] * 0.5)
-    
-    return {
-        "Media Gol Previsti (Casa)": (round(lam_c, 2)),
-        "Media Gol Previsti (Trasferta)": (round(lam_t, 2))
-    }
-
 # --- ACQUISIZIONE DATI ---
 statistiche_squadre = {}
 matches_raw = []
@@ -181,7 +167,6 @@ for c_nome, (codice_lega, tipo_fonte) in selezionati_dict.items():
                 matches_raw.append(m)
                 
         if dati_classifica and "standings" in dati_classifica:
-            # Correzione bug classifica: estraiamo tassativamente la tabella di tipo 'TOTAL'
             for s in dati_classifica["standings"]:
                 if s.get("type") == "TOTAL":
                     for riga in s.get("table", []):
@@ -311,15 +296,14 @@ with tab_calendario:
             
         with col_st:
             str_lit.markdown("<p style='text-align: center; font-weight: 700; color: #94a3b8; margin-bottom: 15px; letter-spacing: 0.5px;'>PARAMETRI DI MODELLO (POISSON)</p>", unsafe_allow_html=True)
-            str_lit.markdown(
-                f"""
-                <div style="background: #111827; padding: 15px; border-radius: 10px; border: 1px solid #1f2937; text-align: center;">
-                    <p style="color: #94a3b8; margin: 0; font-size: 0.9rem;">Forza Offensiva / Difensiva elaborata da Classifica Reale</p>
-                    <h3 style="color: #38bdf8; margin: 10px 0 0 0;">$\lambda$ Casa: {lam_c:.2f} | $\lambda$ Trasferta: {lam_t:.2f}</h3>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            
+            # --- TABELLA / GRIGLIA DATI POISSON RIPRISTINATA E PULITA ---
+            df_parametri_poisson = pd.DataFrame({
+                "Parametro": ["Lambda (λ) Attesi", "Media Gol Fatti (GF)", "Media Gol Subiti (GS)"],
+                sq_c: [f"{lam_c:.2f}", f"{dati_c['media_gf']:.2f}", f"{dati_c['media_gs']:.2f}"],
+                sq_t: [f"{lam_t:.2f}", f"{dati_t['media_gf']:.2f}", f"{dati_t['media_gs']:.2f}"]
+            })
+            str_lit.dataframe(df_parametri_poisson, use_container_width=True, hide_index=True)
 
         str_lit.markdown("<br>", unsafe_allow_html=True)
         str_lit.markdown(f"<h3>🔬 Analisi Avanzata Poisson & Mercati: {sq_c} vs {sq_t}</h3>", unsafe_allow_html=True)
@@ -408,7 +392,6 @@ with tab_grafici:
 def genera_dataset_valore(matches_list, stats_dict):
     righe = []
     for m in matches_list:
-        # Filtriamo solo match non ancora disputati (TIMED / SCHEDULED)
         if m.get("status") not in ["TIMED", "SCHEDULED"]:
             continue
             
