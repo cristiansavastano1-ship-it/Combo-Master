@@ -1,3 +1,4 @@
+
 import math
 import pandas as pd
 import numpy as np
@@ -245,6 +246,7 @@ def crea_audit_walk_forward(matches_list, min_storico=30, max_gol=8):
             reale_nogoal = int(partita["gol_casa"] == 0 or partita["gol_trasferta"] == 0)
             probs = {"1": p1, "X": px, "2": p2}
             previsto = max(probs, key=probs.get)
+            posizione_x = 1 + sum(probs[k] > px for k in ("1", "2"))
             brier_1x2 = sum((probs[k] - (1.0 if esito == k else 0.0)) ** 2 for k in ("1", "X", "2"))
             p_esito = max(1e-12, probs[esito])
             p_ng_real = p_nogoal if reale_nogoal else p_goal
@@ -254,6 +256,7 @@ def crea_audit_walk_forward(matches_list, min_storico=30, max_gol=8):
                 "P(1) %": 100*p1, "P(X) %": 100*px, "P(2) %": 100*p2,
                 "Segno previsto": previsto, "Esito reale": esito,
                 "X prevista come segno": int(previsto == "X"),
+                "Posizione X": posizione_x,
                 "P(No Goal) %": 100*p_nogoal, "No Goal favorito": int(p_nogoal > p_goal),
                 "No Goal reale": reale_nogoal,
                 "Brier 1X2": brier_1x2, "Log Loss 1X2": -math.log(p_esito),
@@ -677,6 +680,40 @@ with tab_audit:
             barmode="group", template="plotly_dark", title="Calibrazione empirica — modello contro risultati reali"
         )
         str_lit.plotly_chart(fig_audit, use_container_width=True)
+
+        # Diagnostica aggiuntiva: frequenza reale dentro fasce di probabilità.
+        str_lit.markdown("#### 🔬 Calibrazione per fasce di probabilità")
+        fasce = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100.000001]
+        etichette = ["0–10%", "10–20%", "20–30%", "30–40%", "40–50%", "50–60%", "60–70%", "70–80%", "80–90%", "90–100%"]
+
+        df_x_bin = df_audit[["P(X) %", "Esito reale"]].copy()
+        df_x_bin["X reale"] = (df_x_bin["Esito reale"] == "X").astype(int)
+        df_x_bin["Fascia probabilità"] = pd.cut(df_x_bin["P(X) %"].clip(0, 100), bins=fasce, labels=etichette, right=True, include_lowest=True)
+        cal_x = df_x_bin.groupby("Fascia probabilità", observed=False).agg(
+            Partite=("X reale", "size"), **{"Probabilità media (%)": ("P(X) %", "mean"), "Frequenza reale (%)": ("X reale", lambda x: 100*x.mean())}
+        ).reset_index()
+        cal_x = cal_x[cal_x["Partite"] > 0].copy()
+        cal_x["Scarto (pp)"] = cal_x["Probabilità media (%)"] - cal_x["Frequenza reale (%)"]
+        str_lit.caption("Pareggio X: la frequenza reale in tabella è la quota di pareggi osservati dentro ciascuna fascia P(X).")
+        str_lit.dataframe(cal_x.round(2), use_container_width=True, hide_index=True)
+
+
+        df_ng_bin = df_audit[["P(No Goal) %", "No Goal reale"]].copy()
+        df_ng_bin["Fascia probabilità"] = pd.cut(df_ng_bin["P(No Goal) %"].clip(0, 100), bins=fasce, labels=etichette, right=True, include_lowest=True)
+        cal_ng = df_ng_bin.groupby("Fascia probabilità", observed=False).agg(
+            Partite=("No Goal reale", "size"), **{"Probabilità media (%)": ("P(No Goal) %", "mean"), "Frequenza reale (%)": ("No Goal reale", lambda x: 100*x.mean())}
+        ).reset_index()
+        cal_ng = cal_ng[cal_ng["Partite"] > 0].copy()
+        cal_ng["Scarto (pp)"] = cal_ng["Probabilità media (%)"] - cal_ng["Frequenza reale (%)"]
+        str_lit.caption("Goal / No Goal: frequenza reale = partite in cui almeno una delle due squadre non ha segnato.")
+        str_lit.dataframe(cal_ng.round(2), use_container_width=True, hide_index=True)
+
+        str_lit.markdown("#### 🧭 Perché il segno X viene scelto poco? ")
+        posizione_x = df_audit["Posizione X"].value_counts().reindex([1, 2, 3], fill_value=0)
+        x1, x2, x3 = str_lit.columns(3)
+        x1.metric("X al 1° posto", f"{posizione_x.loc[1]}", f"{posizione_x.loc[1]/n*100:.1f}% delle partite")
+        x2.metric("X al 2° posto", f"{posizione_x.loc[2]}", f"{posizione_x.loc[2]/n*100:.1f}% delle partite")
+        x3.metric("X al 3° posto", f"{posizione_x.loc[3]}", f"{posizione_x.loc[3]/n*100:.1f}% delle partite")
 
         scarto_x = prob_x_media - freq_x_reale
         scarto_ng = prob_ng_media - freq_ng_reale
