@@ -1,5 +1,3 @@
-
-
 import math
 import pandas as pd
 import numpy as np
@@ -173,8 +171,14 @@ def calcola_statistiche_avanzate_match(sq_casa, sq_trasf, statistiche_squadre):
     }
 
 # --- AUDIT WALK-FORWARD: PAREGGI (X) E GOAL / NO GOAL ---
-def crea_audit_walk_forward(matches_list, min_storico=30, max_gol=8):
-    """Valuta probabilità storiche usando esclusivamente partite precedenti alla data analizzata."""
+def crea_audit_walk_forward(matches_list, min_storico=30, max_gol=5):
+    """Audit walk-forward usando la stessa logica Poisson del pronostico operativo.
+
+    Per ogni partita usa solo risultati precedenti della stessa competizione.
+    Le lambda sono le medie gol fatti per squadra, coerenti con il modello live
+    (media_gf della classifica); la matrice 0..5 viene normalizzata prima di
+    calcolare 1X2 e Goal/No Goal.
+    """
     partite = []
     for m in matches_list:
         status = str(m.get("status", "")).upper()
@@ -198,46 +202,40 @@ def crea_audit_walk_forward(matches_list, min_storico=30, max_gol=8):
     storico = []
     righe = []
 
-    def media(valori, fallback):
-        return float(np.mean(valori)) if valori else float(fallback)
-
-    def media_ridotta(valori, fallback, peso_prior=5.0):
-        # Shrinkage verso la media del campionato per evitare medie estreme con pochi dati.
-        n = len(valori)
-        return (sum(valori) + peso_prior * fallback) / (n + peso_prior) if n else float(fallback)
-
     def poisson_vector(lam):
-        lam = max(0.05, min(float(lam), 5.0))
-        vals = np.array([math.exp(-lam) * (lam ** k) / math.factorial(k) for k in range(max_gol + 1)], dtype=float)
-        s = vals.sum()
-        return vals / s if s > 0 else np.eye(1, max_gol + 1, 0).ravel()
+        # Stessa matrice dei pronostici live: risultati da 0 a 5 gol.
+        lam = max(0.01, float(lam))
+        vals = np.array([
+            math.exp(-lam) * (lam ** k) / math.factorial(k)
+            for k in range(max_gol + 1)
+        ], dtype=float)
+        return vals
 
     for partita in partite:
-        # Non usare mai la partita corrente né risultati successivi per stimare le probabilità.
-        precedenti = [x for x in storico if x["competizione"] == partita["competizione"] and x["data"].date() < partita["data"].date()]
+        # Escludiamo tutte le partite della stessa data: scelta conservativa anti-leakage.
+        precedenti = [x for x in storico
+                      if x["competizione"] == partita["competizione"]
+                      and x["data"].date() < partita["data"].date()]
         if len(precedenti) >= min_storico:
-            media_casa_lega = media([x["gol_casa"] for x in precedenti], 1.40)
-            media_trasf_lega = media([x["gol_trasferta"] for x in precedenti], 1.10)
+            casa, trasf = partita["casa"], partita["trasferta"]
+            # Media gol fatti per squadra in tutte le precedenti partite,
+            # corrispondente a goalsFor / playedGames usato dal modello live.
+            gf_c = [x["gol_casa"] for x in precedenti if x["casa"] == casa]
+            gf_c += [x["gol_trasferta"] for x in precedenti if x["trasferta"] == casa]
+            gf_t = [x["gol_casa"] for x in precedenti if x["casa"] == trasf]
+            gf_t += [x["gol_trasferta"] for x in precedenti if x["trasferta"] == trasf]
+            lam_c = float(np.mean(gf_c)) if gf_c else 1.4
+            lam_t = float(np.mean(gf_t)) if gf_t else 1.1
 
-            casa = partita["casa"]
-            trasf = partita["trasferta"]
-            casa_casa = [x for x in precedenti if x["casa"] == casa]
-            casa_trasf = [x for x in precedenti if x["trasferta"] == casa]
-            trasf_casa = [x for x in precedenti if x["casa"] == trasf]
-            trasf_trasf = [x for x in precedenti if x["trasferta"] == trasf]
-
-            gf_c = media_ridotta([x["gol_casa"] for x in casa_casa], media_casa_lega)
-            gs_c = media_ridotta([x["gol_trasferta"] for x in casa_casa], media_trasf_lega)
-            gf_t = media_ridotta([x["gol_trasferta"] for x in trasf_trasf], media_trasf_lega)
-            gs_t = media_ridotta([x["gol_casa"] for x in trasf_trasf], media_casa_lega)
-
-            # Modello Poisson semplice e trasparente: attacco/defesa casa e trasferta.
-            lam_c = gf_c * gs_t / max(0.25, media_casa_lega)
-            lam_t = gf_t * gs_c / max(0.25, media_trasf_lega)
             ph = poisson_vector(lam_c)
             pa = poisson_vector(lam_t)
             matrice = np.outer(ph, pa)
-            matrice /= max(matrice.sum(), 1e-12)
+            totale = float(matrice.sum())
+            if totale <= 0:
+                storico.append(partita)
+                continue
+            matrice /= totale  # normalizzazione unica per tutti i mercati
+
             p1 = float(np.tril(matrice, -1).sum())
             px = float(np.trace(matrice))
             p2 = float(np.triu(matrice, 1).sum())
@@ -264,6 +262,7 @@ def crea_audit_walk_forward(matches_list, min_storico=30, max_gol=8):
                 "Brier Goal/No Goal": (p_nogoal - reale_nogoal) ** 2,
                 "Log Loss Goal/No Goal": -math.log(max(1e-12, p_ng_real)),
                 "Storico pre-partita": len(precedenti),
+                "Lambda casa": lam_c, "Lambda trasferta": lam_t,
             })
         storico.append(partita)
 
@@ -370,8 +369,11 @@ with tab_calendario:
                     prob_btts_yes += prob
 
         tot = p_c + p_p + p_t
-        p_c, p_p, p_t = (p_c/tot)*100, (p_p/tot)*100, (p_t/tot)*100
+        # La matrice considera i punteggi 0..5: normalizziamo anche BTTS,
+        # altrimenti la massa Poisson oltre 5 gol viene conteggiata erroneamente come No Goal.
+        prob_btts_yes = prob_btts_yes / tot if tot > 0 else 0.0
         prob_btts_no = 1.0 - prob_btts_yes
+        p_c, p_p, p_t = (p_c/tot)*100, (p_p/tot)*100, (p_t/tot)*100
 
         stats_match = calcola_statistiche_avanzate_match(sq_c, sq_t, statistiche_squadre)
 
